@@ -1,49 +1,37 @@
 #include "common.h"
 
-/* obsolete */
-unsigned long kb_main_shared;
-/* old but still kicking -- the important stuff */
-unsigned long kb_main_buffers;
-unsigned long kb_main_cached;
-unsigned long kb_main_free;
-unsigned long kb_main_total;
-unsigned long kb_swap_free;
-unsigned long kb_swap_total;
-/* recently introduced */
-unsigned long kb_high_free;
-unsigned long kb_high_total;
-unsigned long kb_low_free;
-unsigned long kb_low_total;
-/* 2.4.xx era */
-unsigned long kb_active;
-unsigned long kb_inact_laundry;
-unsigned long kb_inact_dirty;
-unsigned long kb_inact_clean;
-unsigned long kb_inact_target;
-unsigned long kb_swap_cached;  /* late 2.4 and 2.6+ only */
-/* derived values */
-unsigned long kb_swap_used;
-unsigned long kb_main_used;
-/* 2.5.41+ */
-unsigned long kb_writeback;
-unsigned long kb_slab;
-unsigned long nr_reversemaps;
-unsigned long kb_committed_as;
-unsigned long kb_dirty;
-unsigned long kb_inactive;
-unsigned long kb_mapped;
-unsigned long kb_pagetables;
-// seen on a 2.6.x kernel:
-static unsigned long kb_vmalloc_chunk;
-static unsigned long kb_vmalloc_total;
-static unsigned long kb_vmalloc_used;
-// seen on 2.6.24-rc6-git12
-static unsigned long kb_anon_pages;
-static unsigned long kb_bounce;
-static unsigned long kb_commit_limit;
-static unsigned long kb_nfs_unstable;
-static unsigned long kb_swap_reclaimable;
-static unsigned long kb_swap_unreclaimable;
+#define PROC_FILLMEM         0x0001 // read statm
+#define PROC_FILLCOM         0x0002 // alloc and fill in `cmdline'
+#define PROC_FILLENV         0x0004 // alloc and fill in `environ'
+#define PROC_FILLUSR         0x0008 // resolve user id number -> user name
+#define PROC_FILLGRP         0x0010 // resolve group id number -> group name
+#define PROC_FILLSTATUS      0x0020 // read status -- currently unconditional
+#define PROC_FILLSTAT        0x0040 // read stat -- currently unconditional
+#define PROC_FILLWCHAN       0x0080 // look up WCHAN name
+#define PROC_FILLARG         0x0100 // alloc and fill in `cmdline'
+
+#define PROC_LOOSE_TASKS     0x0200 // threat threads as if they were processes
+
+// Obsolete, consider only processes with one of the passed:
+#define PROC_PID             0x1000  // process id numbers ( 0   terminated)
+#define PROC_UID             0x4000  // user id numbers    ( length needed )
+
+// it helps to give app code a few spare bits
+#define PROC_SPARE_1     0x01000000
+#define PROC_SPARE_2     0x02000000
+#define PROC_SPARE_3     0x04000000
+#define PROC_SPARE_4     0x08000000
+
+#define STAT_FILE    "/proc/stat"
+static int stat_fd = -1;
+#define UPTIME_FILE  "/proc/uptime"
+static int uptime_fd = -1;
+#define LOADAVG_FILE "/proc/loadavg"
+static int loadavg_fd = -1;
+#define MEMINFO_FILE "/proc/meminfo"
+static int meminfo_fd = -1;
+#define VMINFO_FILE "/proc/vmstat"
+static int vminfo_fd = -1;
 
 #define LOADAV_line  "%s -%s\n"
 #define LOADAV_line_alt  "%s\06 -%s\n"
@@ -91,6 +79,23 @@ static unsigned long kb_swap_unreclaimable;
     buf[local_n] = '\0';					\
 }while(0)
 
+#define ENTER(x) __cyg_profile_func_enter((void*)x,(void*)x)
+#define LEAVE(x) __cyg_profile_func_exit((void*)x,(void*)x)
+
+#ifdef LABEL_OFFSET
+#define F(x) {#x, sizeof(#x)-1, (long)(&&case_##x-&&base)},
+#else
+#define F(x) {#x, sizeof(#x)-1, &&case_##x},
+#endif
+#define NUL  {"", 0, 0},
+
+#define XinLN(T, X, L, N) ( {		\
+	    T x = (X), *l = (L);		\
+	    int i = 0, n = (N);			\
+	    while (i < n && l[i] != x) i++;	\
+	    i < n && l[i] == x;			\
+	} )
+
 typedef unsigned long long TIC_t;
 typedef          long long SIC_t;
 
@@ -99,10 +104,10 @@ typedef struct PROCTAB {
 		DIR*	taskdir;  // for threads
 		pid_t	taskdir_user;  // for threads
 		int         did_fake; // used when taskdir is missing
-		int(*finder)(struct PROCTAB *restrict const, proc_t *restrict const);
-		proc_t*(*reader)(struct PROCTAB *restrict const, proc_t *restrict const);
-		int(*taskfinder)(struct PROCTAB *restrict const, const proc_t *restrict const, proc_t *restrict const, char *restrict const);
-		proc_t*(*taskreader)(struct PROCTAB *restrict const, const proc_t *restrict const, proc_t *restrict const, char *restrict const);
+		int (*finder)(struct PROCTAB *restrict const, proc_t *restrict const);
+		proc_t* (*reader)(struct PROCTAB *restrict const, proc_t *restrict const);
+		int (*taskfinder)(struct PROCTAB *restrict const, const proc_t *restrict const, proc_t *restrict const, char *restrict const);
+		proc_t* (*taskreader)(struct PROCTAB *restrict const, const proc_t *restrict const, proc_t *restrict const, char *restrict const);
 		pid_t*	pids;	// pids of the procs
 		uid_t*	uids;	// uids of procs
 		int		nuid;	// cannot really sentinel-terminate unsigned short[]
@@ -112,7 +117,7 @@ typedef struct PROCTAB {
 		void *      vp; // generic
 		char        path[PROCPATHLEN];  // must hold /proc/2000222000/task/2000222000/cmdline
 		unsigned pathlen;        // length of string in the above (w/o '\0')
-};
+}PROCTAB;
 
 typedef struct HST_t {
    TIC_t tics;
@@ -133,8 +138,24 @@ typedef struct mem_table_struct {
 static struct pwbuf {
 	struct pwbuf *next;
 	uid_t uid;
-	char name[P_G_SZ];
-} *pwhash[HASHSIZE];
+	char name[20];
+} *pwhash[64];
+
+static struct grpbuf {
+    struct grpbuf *next;
+    gid_t gid;
+    char name[P_G_SZ];
+} *grphash[64];
+
+typedef struct status_table_struct {
+    unsigned char name[7];        // /proc/*/status field name
+    unsigned char len;            // name length
+#ifdef LABEL_OFFSET
+    long offset;                  // jump address offset
+#else
+    void *addr;
+#endif
+} status_table_struct;
 
 static int       Frames_libflags;       // PROC_FILLxxx flags (0 = need new)
 static unsigned  Frame_maxtask;         // last known number of active tasks
@@ -147,6 +168,51 @@ static float     Frame_tscale;          // so we can '*' vs. '/' WHEN 'pcpu'
 static int       Frame_srtflg,          // the subject window's sort direction
                  Frame_ctimes,          // the subject window's ctimes flag
                  Frame_cmdlin;          // the subject window's cmdlin flag
+
+/* obsolete */
+unsigned long kb_main_shared;
+/* old but still kicking -- the important stuff */
+unsigned long kb_main_buffers;
+unsigned long kb_main_cached;
+unsigned long kb_main_free;
+unsigned long kb_main_total;
+unsigned long kb_swap_free;
+unsigned long kb_swap_total;
+/* recently introduced */
+unsigned long kb_high_free;
+unsigned long kb_high_total;
+unsigned long kb_low_free;
+unsigned long kb_low_total;
+/* 2.4.xx era */
+unsigned long kb_active;
+unsigned long kb_inact_laundry;
+unsigned long kb_inact_dirty;
+unsigned long kb_inact_clean;
+unsigned long kb_inact_target;
+unsigned long kb_swap_cached;  /* late 2.4 and 2.6+ only */
+/* derived values */
+unsigned long kb_swap_used;
+unsigned long kb_main_used;
+/* 2.5.41+ */
+unsigned long kb_writeback;
+unsigned long kb_slab;
+unsigned long nr_reversemaps;
+unsigned long kb_committed_as;
+unsigned long kb_dirty;
+unsigned long kb_inactive;
+unsigned long kb_mapped;
+unsigned long kb_pagetables;
+// seen on a 2.6.x kernel:
+static unsigned long kb_vmalloc_chunk;
+static unsigned long kb_vmalloc_total;
+static unsigned long kb_vmalloc_used;
+// seen on 2.6.24-rc6-git12
+static unsigned long kb_anon_pages;
+static unsigned long kb_bounce;
+static unsigned long kb_commit_limit;
+static unsigned long kb_nfs_unstable;
+static unsigned long kb_swap_reclaimable;
+static unsigned long kb_swap_unreclaimable;
 
 static char str[100] = " ";
 
@@ -161,7 +227,7 @@ static void show_special(int interact, const char *glob);
 
 static const char *fmtmk (const char *fmts, ...)
 {
-   static char buf[BIGBUFSIZ];          // with help stuff, our buffer
+   static char buf[2048];          // with help stuff, our buffer
    va_list va;                          // requirements exceed 1k
 
    va_start(va, fmts);
@@ -279,7 +345,7 @@ char *user_from_uid(uid_t uid) {
 	*p = (struct pwbuf *) malloc(sizeof(struct pwbuf));
 	(*p)->uid = uid;
 	pw = getpwuid(uid);
-	if(!pw || strlen(pw->pw_name) >= P_G_SZ)
+	if(!pw || strlen(pw->pw_name) >= 20)
 		sprintf((*p)->name, "%u", uid);
 	else
 	    strcpy((*p)->name, pw->pw_name);
@@ -301,7 +367,7 @@ char *group_from_gid(gid_t gid) {
     *g = (struct grpbuf *) malloc(sizeof(struct grpbuf));
 	(*g)->gid = gid;
 	gr = getgrgid(gid);
-	if (!gr || strlen(gr->gr_name) >= P_G_SZ)
+	if (!gr || strlen(gr->gr_name) >= 20)
 	    sprintf((*g)->name, "%u", gid);
 	else
 	        strcpy((*g)->name, gr->gr_name);
@@ -370,6 +436,318 @@ next_task:
 		return NULL;
 }
 
+static void statm2proc(const char* s, proc_t *restrict P) {
+    int num;
+    num = sscanf(s, "%ld %ld %ld %ld %ld %ld %ld",
+	   &P->size, &P->resident, &P->share,
+	   &P->trs, &P->lrs, &P->drs, &P->dt);
+/*    fprintf(stderr, "statm2proc converted %d fields.\n",num); */
+}
+
+static unsigned long long unhex(const char *restrict cp){
+    unsigned long long ull = 0;
+    for(;;){
+        char c = *cp++;
+        if(c<0x30) break;
+        ull = (ull<<4) | (c - (c>0x57) ? 0x57 : 0x30) ;
+    }
+    return ull;
+}
+
+static void status2proc(char *S, proc_t *restrict P, int is_proc){
+    long Threads = 0;
+    long Tgid = 0;
+    long Pid = 0;
+
+  static const unsigned char asso[] =
+    {
+      61, 61, 61, 61, 61, 61, 61, 61, 61, 61,
+      61, 61, 61, 61, 61, 61, 61, 61, 61, 61,
+      61, 61, 61, 61, 61, 61, 61, 61, 61, 61,
+      61, 61, 61, 61, 61, 61, 61, 61, 61, 61,
+      61, 61, 61, 61, 61, 61, 61, 61, 61, 61,
+      61, 61, 61, 61, 61, 61, 61, 61, 15, 61,
+      61, 61, 61, 61, 61, 61, 30,  3,  5,  5,
+      61,  5, 61,  8, 61, 61,  3, 61, 10, 61,
+       6, 61, 13,  0, 30, 25,  0, 61, 61, 61,
+      61, 61, 61, 61, 61, 61, 61,  3, 61, 13,
+       0,  0, 61, 30, 61, 25, 61, 61, 61,  0,
+      61, 61, 61, 61,  5, 61,  0, 61, 61, 61,
+       0, 61, 61, 61, 61, 61, 61, 61
+    };
+
+    static const status_table_struct table[] = {
+      F(VmStk)
+      NUL NUL
+      F(State)
+      NUL
+      F(VmExe)
+      F(ShdPnd)
+      NUL
+      F(VmData)
+      NUL
+      F(Name)
+      NUL NUL
+      F(VmRSS)
+      NUL NUL
+      F(VmLck)
+      NUL NUL NUL
+      F(Gid)
+      F(Pid)
+      NUL NUL NUL
+      F(VmSize)
+      NUL NUL
+      F(VmLib)
+      NUL NUL
+      F(PPid)
+      NUL
+      F(SigCgt)
+      NUL
+      F(Threads)
+      F(SigPnd)
+      NUL
+      F(SigIgn)
+      NUL
+      F(Uid)
+      NUL NUL NUL NUL NUL NUL NUL NUL NUL
+      NUL NUL NUL NUL NUL
+      F(Tgid)
+      NUL NUL NUL NUL
+      F(SigBlk)
+      NUL NUL NUL
+    };
+
+#undef F
+#undef NUL
+
+ENTER(0x220);
+
+    P->vm_size = 0;
+    P->vm_lock = 0;
+    P->vm_rss  = 0;
+    P->vm_data = 0;
+    P->vm_stack= 0;
+    P->vm_exe  = 0;
+    P->vm_lib  = 0;
+    P->nlwp    = 0;
+    P->signal[0] = '\0';  // so we can detect it as missing for very old kernels
+
+    goto base;
+
+    for(;;){
+        char *colon;
+        status_table_struct entry;
+
+        // advance to next line
+        S = strchr(S, '\n');
+        if(!S) break;  // if no newline
+        S++;
+
+        // examine a field name (hash and compare)
+    base:
+        if(!*S) break;
+        entry = table[63 & (asso[S[3]] + asso[S[2]] + asso[S[0]])];
+        colon = strchr(S, ':');
+        if(!colon) break;
+        if(colon[1]!='\t') break;
+        if(colon-S != entry.len)) continue;
+        if(memcmp(entry.name,S,colon-S)) continue;
+
+        S = colon+2; // past the '\t'
+
+        goto *entry.addr;
+
+    case_Name:{
+        unsigned u = 0;
+        while(u < sizeof P->cmd - 1u){
+            int c = *S++;
+            if(c=='\n') break;
+            if(c=='\0') break; // should never happen
+            if(c=='\\'){
+                c = *S++;
+                if(c=='\n') break; // should never happen
+                if(!c)      break; // should never happen
+                if(c=='n') c='\n'; // else we assume it is '\\'
+            }
+            P->cmd[u++] = c;
+        }
+        P->cmd[u] = '\0';
+        S--;   // put back the '\n' or '\0'
+        continue;
+    }
+#ifdef SIGNAL_STRING
+		case_ShdPnd:
+			memcpy(P->signal, S, 16);
+			P->signal[16] = '\0';
+			continue;
+		case_SigBlk:
+			memcpy(P->blocked, S, 16);
+			P->blocked[16] = '\0';
+			continue;
+		case_SigCgt:
+			memcpy(P->sigcatch, S, 16);
+			P->sigcatch[16] = '\0';
+			continue;
+		case_SigIgn:
+			memcpy(P->sigignore, S, 16);
+			P->sigignore[16] = '\0';
+			continue;
+		case_SigPnd:
+			memcpy(P->_sigpnd, S, 16);
+			P->_sigpnd[16] = '\0';
+			continue;
+#else
+		case_ShdPnd:
+			P->signal = unhex(S);
+			continue;
+		case_SigBlk:
+			P->blocked = unhex(S);
+			continue;
+		case_SigCgt:
+			P->sigcatch = unhex(S);
+			continue;
+		case_SigIgn:
+			P->sigignore = unhex(S);
+			continue;
+		case_SigPnd:
+			P->_sigpnd = unhex(S);
+			continue;
+#endif
+		case_State:
+			P->state = *S;
+			continue;
+		case_Tgid:
+			Tgid = strtol(S,&S,10);
+			continue;
+		case_Pid:
+			Pid = strtol(S,&S,10);
+			continue;
+		case_PPid:
+			P->ppid = strtol(S,&S,10);
+			continue;
+		case_Threads:
+			Threads = strtol(S,&S,10);
+			continue;
+		case_Uid:
+			P->ruid = strtol(S,&S,10);
+			P->euid = strtol(S,&S,10);
+			P->suid = strtol(S,&S,10);
+			P->fuid = strtol(S,&S,10);
+			continue;
+		case_Gid:
+			P->rgid = strtol(S,&S,10);
+			P->egid = strtol(S,&S,10);
+			P->sgid = strtol(S,&S,10);
+			P->fgid = strtol(S,&S,10);
+			continue;
+		case_VmData:
+			P->vm_data = strtol(S,&S,10);
+			continue;
+		case_VmExe:
+			P->vm_exe = strtol(S,&S,10);
+			continue;
+		case_VmLck:
+			P->vm_lock = strtol(S,&S,10);
+			continue;
+		case_VmLib:
+			P->vm_lib = strtol(S,&S,10);
+			continue;
+		case_VmRSS:
+			P->vm_rss = strtol(S,&S,10);
+			continue;
+		case_VmSize:
+			P->vm_size = strtol(S,&S,10);
+			continue;
+		case_VmStk:
+			P->vm_stack = strtol(S,&S,10);
+			continue;
+		}
+
+
+    // recent kernels supply per-tgid pending signals
+#ifdef SIGNAL_STRING
+    if(!is_proc || !P->signal[0]){
+	memcpy(P->signal, P->_sigpnd, 16);
+	P->signal[16] = '\0';
+    }
+#else
+    if(!is_proc || !have_process_pending){
+	P->signal = P->_sigpnd;
+    }
+#endif
+
+    // Linux 2.4.13-pre1 to max 2.4.xx have a useless "Tgid"
+    // that is not initialized for built-in kernel tasks.
+    // Only 2.6.0 and above have "Threads" (nlwp) info.
+
+    if(Threads){
+       P->nlwp = Threads;
+       P->tgid = Tgid;     // the POSIX PID value
+       P->tid  = Pid;      // the thread ID
+    }else{
+       P->nlwp = 1;
+       P->tgid = Pid;
+       P->tid  = Pid;
+    }
+
+LEAVE(0x220);
+}
+
+static char** file2strvec(const char* directory, const char* what) {
+    char buf[2048];	/* read buf bytes at a time */
+    char *p, *rbuf = 0, *endbuf, **q, **ret;
+    int fd, tot = 0, n, c, end_of_file = 0;
+    int align;
+
+    sprintf(buf, "%s/%s", directory, what);
+    fd = open(buf, O_RDONLY, 0);
+    if(fd==-1) return NULL;
+
+    /* read whole file into a memory buffer, allocating as we go */
+    while ((n = read(fd, buf, sizeof buf - 1)) > 0) {
+	if (n < (int)(sizeof buf - 1))
+	    end_of_file = 1;
+	if (n == 0 && rbuf == 0)
+	    return NULL;	/* process died between our open and read */
+	if (n < 0) {
+	    if (rbuf)
+		free(rbuf);
+	    return NULL;	/* read error */
+	}
+	if (end_of_file && buf[n-1])		/* last read char not null */
+	    buf[n++] = '\0';			/* so append null-terminator */
+	rbuf = xrealloc(rbuf, tot + n);		/* allocate more memory */
+	memcpy(rbuf + tot, buf, n);		/* copy buffer into it */
+	tot += n;				/* increment total byte ctr */
+	if (end_of_file)
+	    break;
+    }
+    close(fd);
+    if (n <= 0 && !end_of_file) {
+	if (rbuf) free(rbuf);
+	return NULL;		/* read error */
+    }
+    endbuf = rbuf + tot;			/* count space for pointers */
+    align = (sizeof(char*)-1) - ((tot + sizeof(char*)-1) & (sizeof(char*)-1));
+    for (c = 0, p = rbuf; p < endbuf; p++)
+    	if (!*p)
+	    c += sizeof(char*);
+    c += sizeof(char*);				/* one extra for NULL term */
+
+    rbuf = xrealloc(rbuf, tot + c + align);	/* make room for ptrs AT END */
+    endbuf = rbuf + tot;			/* addr just past data buf */
+    q = ret = (char**) (endbuf+align);		/* ==> free(*ret) to dealloc */
+    *q++ = p = rbuf;				/* point ptrs to the strings */
+    endbuf--;					/* do not traverse final NUL */
+    while (++p < endbuf) 
+    	if (!*p)				/* NUL char implies that */
+	    *q++ = p+1;				/* next string -> next char */
+
+    *q = 0;					/* null ptr list terminator */
+    return ret;
+}
+
+
 static proc_t* simple_readproc(PROCTAB *restrict const PT, proc_t *restrict const p) {
 	static struct stat sb;		// stat() buffer
 	static char sbuf[1024];	// buffer for stat,statm
@@ -404,7 +782,7 @@ static proc_t* simple_readproc(PROCTAB *restrict const PT, proc_t *restrict cons
 
 	// if multithreaded, some values are crap
     if(p->nlwp > 1){
-      p->wchan = (KLONG)~0ull;
+      p->wchan = (long long)~0ull;
     }
 
     /* some number->text resolving which is time consuming and kind of insane */
@@ -733,6 +1111,10 @@ static CPU_t *cpus_refresh (CPU_t *cpus)
             std_err("failed /proc/stat read");
    }
    return cpus;
+}
+
+static int compare_mem_table_structs(const void *a, const void *b){
+  return strcmp(((const mem_table_struct*)a)->name,((const mem_table_struct*)b)->name);
 }
 
 void meminfo(void){
