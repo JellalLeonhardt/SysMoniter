@@ -14,6 +14,7 @@
 #include <curses.h>
 #include <fcntl.h>
 #include <pwd.h>
+#include <dirent.h>
 
 void frame(void);
 void init(void);

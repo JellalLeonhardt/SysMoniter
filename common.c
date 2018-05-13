@@ -104,10 +104,10 @@ typedef struct PROCTAB {
 		DIR*	taskdir;  // for threads
 		pid_t	taskdir_user;  // for threads
 		int         did_fake; // used when taskdir is missing
-		int (*finder)(struct PROCTAB *restrict const, proc_t *restrict const);
-		proc_t* (*reader)(struct PROCTAB *restrict const, proc_t *restrict const);
-		int (*taskfinder)(struct PROCTAB *restrict const, const proc_t *restrict const, proc_t *restrict const, char *restrict const);
-		proc_t* (*taskreader)(struct PROCTAB *restrict const, const proc_t *restrict const, proc_t *restrict const, char *restrict const);
+		int (*finder)(struct PROCTAB *__restrict const, proc_t *__restrict const);
+		proc_t* (*reader)(struct PROCTAB *__restrict const, proc_t *__restrict const);
+		int (*taskfinder)(struct PROCTAB *__restrict const, const proc_t *__restrict const, proc_t *__restrict const, char *__restrict const);
+		proc_t* (*taskreader)(struct PROCTAB *__restrict const, const proc_t *__restrict const, proc_t *__restrict const, char *__restrict const);
 		pid_t*	pids;	// pids of the procs
 		uid_t*	uids;	// uids of procs
 		int		nuid;	// cannot really sentinel-terminate unsigned short[]
@@ -144,7 +144,7 @@ static struct pwbuf {
 static struct grpbuf {
     struct grpbuf *next;
     gid_t gid;
-    char name[P_G_SZ];
+    char name[20];
 } *grphash[64];
 
 typedef struct status_table_struct {
@@ -236,7 +236,7 @@ static const char *fmtmk (const char *fmts, ...)
    return (const char *)buf;
 }
 
-static int simple_nexttid(PROCTAB *restrict const PT, const proc_t *restrict const p, proc_t *restrict const t, char *restrict const path) {
+static int simple_nexttid(PROCTAB *__restrict const PT, const proc_t *__restrict const p, proc_t *__restrict const t, char *__restrict const path) {
 	static struct direct *ent;		/* dirent handle */
 	if(PT->taskdir_user != p->tgid){
 		    if(PT->taskdir){
@@ -273,7 +273,7 @@ static int file2str(const char *directory, const char *what, char *ret, int cap)
 	return num_read;
 }
 
-static void stat2proc(const char *S, proc_t *restrict P){
+static void stat2proc(const char *S, proc_t *__restrict P){
 	unsigned num;
 	char *tmp;
 	__cyg_profile_func_enter((void *)0x160, (void *)0x160);
@@ -375,7 +375,7 @@ char *group_from_gid(gid_t gid) {
 	return((*g)->name);
 }
 
-static proc_t* simple_readtask(PROCTAB *restrict const PT, const proc_t *restrict const p, proc_t *restrict const t, char *restrict const path) {
+static proc_t* simple_readtask(PROCTAB *__restrict const PT, const proc_t *__restrict const p, proc_t *__restrict const t, char *__restrict const path) {
 	    static struct stat sb;		// stat() buffer
 		static char sbuf[1024];	// buffer for stat,statm
 		unsigned flags = PT->flags;
@@ -436,7 +436,7 @@ next_task:
 		return NULL;
 }
 
-static void statm2proc(const char* s, proc_t *restrict P) {
+static void statm2proc(const char* s, proc_t *__restrict P) {
     int num;
     num = sscanf(s, "%ld %ld %ld %ld %ld %ld %ld",
 	   &P->size, &P->resident, &P->share,
@@ -444,7 +444,7 @@ static void statm2proc(const char* s, proc_t *restrict P) {
 /*    fprintf(stderr, "statm2proc converted %d fields.\n",num); */
 }
 
-static unsigned long long unhex(const char *restrict cp){
+static unsigned long long unhex(const char *__restrict cp){
     unsigned long long ull = 0;
     for(;;){
         char c = *cp++;
@@ -454,7 +454,7 @@ static unsigned long long unhex(const char *restrict cp){
     return ull;
 }
 
-static void status2proc(char *S, proc_t *restrict P, int is_proc){
+static void status2proc(char *S, proc_t *__restrict P, int is_proc){
     long Threads = 0;
     long Tgid = 0;
     long Pid = 0;
@@ -748,10 +748,10 @@ static char** file2strvec(const char* directory, const char* what) {
 }
 
 
-static proc_t* simple_readproc(PROCTAB *restrict const PT, proc_t *restrict const p) {
+static proc_t* simple_readproc(PROCTAB *__restrict const PT, proc_t *__restrict const p) {
 	static struct stat sb;		// stat() buffer
 	static char sbuf[1024];	// buffer for stat,statm
-	char *restrict const path = PT->path;
+	char *__restrict const path = PT->path;
 	unsigned flags = PT->flags;
 
 	if (stat(path, &sb) == -1)	/* no such dirent (anymore) */
@@ -820,8 +820,8 @@ next_proc:
     return NULL;
 }
 
-static int listed_nextpid(PROCTAB *restrict const PT, proc_t *restrict const p) {
-  char *restrict const path = PT->path;
+static int listed_nextpid(PROCTAB *__restrict const PT, proc_t *__restrict const p) {
+  char *__restrict const path = PT->path;
   pid_t tgid = *(PT->pids)++;
   if( tgid ){
     snprintf(path, PROCPATHLEN, "/proc/%d", tgid);
@@ -831,9 +831,9 @@ static int listed_nextpid(PROCTAB *restrict const PT, proc_t *restrict const p) 
   return tgid;
 }
 
-static int simple_nextpid(PROCTAB *restrict const PT, proc_t *restrict const p) {
+static int simple_nextpid(PROCTAB *__restrict const PT, proc_t *__restrict const p) {
   static struct direct *ent;		/* dirent handle */
-  char *restrict const path = PT->path;
+  char *__restrict const path = PT->path;
   for (;;) {
     ent = readdir(PT->procfs);
     if(!ent || !ent->d_name) return 0;
@@ -869,7 +869,7 @@ PROCTAB *openproc(int flags){	//可变参数那部分删除
     return PT;
 }
 
-proc_t* readproc(PROCTAB *restrict const PT, proc_t *restrict p) {
+proc_t* readproc(PROCTAB *__restrict const PT, proc_t *__restrict p) {
   proc_t *ret;
   proc_t *saved_p;
 
