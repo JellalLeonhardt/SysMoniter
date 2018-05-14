@@ -224,7 +224,7 @@ typedef struct PROCTAB {
 		unsigned	flags;
 		unsigned    u;  // generic
 		void *      vp; // generic
-		char        path[PROCPATHLEN];  // must hold /proc/2000222000/task/2000222000/cmdline
+		char        path[64];  // must hold /proc/2000222000/task/2000222000/cmdline
 		unsigned pathlen;        // length of string in the above (w/o '\0')
 }PROCTAB;
 
@@ -351,7 +351,7 @@ static int simple_nexttid(PROCTAB *__restrict const PT, const proc_t *__restrict
 		    if(PT->taskdir){
 				closedir(PT->taskdir);
 			}
-	    	snprintf(path, PROCPATHLEN, "/proc/%d/task", p->tgid);
+	    	snprintf(path, 64, "/proc/%d/task", p->tgid);
 		    PT->taskdir = opendir(path);
 			if(!PT->taskdir) return 0;
 			PT->taskdir_user = p->tgid;
