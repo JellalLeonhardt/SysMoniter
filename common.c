@@ -139,7 +139,7 @@ typedef struct proc_t {
 	sigcatch,	// status          mask of caught  signals
 	_sigpnd;	// status          mask of PER TASK pending signals
 #endif
-    unsigned KLONG
+    unsigned long long
 	start_code,	// stat            address of beginning of code segment
 	end_code,	// stat            address of end of code segment
 	start_stack,	// stat            address of the bottom of stack for the process
