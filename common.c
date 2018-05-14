@@ -1,5 +1,8 @@
 #include "common.h"
 
+#define direct dirent
+
+
 #define PROC_FILLMEM         0x0001 // read statm
 #define PROC_FILLCOM         0x0002 // alloc and fill in `cmdline'
 #define PROC_FILLENV         0x0004 // alloc and fill in `environ'
