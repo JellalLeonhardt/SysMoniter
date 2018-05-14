@@ -57,6 +57,7 @@ static int vminfo_fd = -1;
    " %8luk \02total,\03 %8luk \02used,\03 %8luk \02free,\03 %8luk \02cached\03\n"
 #endif
 
+#define P_G_SZ 20
 #define PUTT(fmt,arg...) do { \
       char _str[ROWBUFSIZ]; \
       snprintf(_str, sizeof(_str), fmt, ## arg); \
