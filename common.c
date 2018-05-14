@@ -401,8 +401,8 @@ static void std_err (const char *str)
    /* we'll use our own buffer so callers can still use fmtmk() and, yes the
       leading tab is not the standard convention, but the standard is wrong
       -- OUR msg won't get lost in screen clutter, like so many others! */
-   snprintf(buf, sizeof(buf), "\t%s: %s\n", Myname, str);
-   if (!Ttychanged) {
+   snprintf(buf, sizeof(buf), "\t%s: %s\n", "toptest", str);
+   if (1) {
       fprintf(stderr, "%s\n", buf);
       exit(1);
    }
