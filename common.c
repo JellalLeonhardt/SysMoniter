@@ -1027,7 +1027,7 @@ static int simple_nextpid(PROCTAB *__restrict const PT, proc_t *__restrict const
 
 
 PROCTAB *openproc(int flags){	//可变参数那部分删除
-	PROCTAB *PT = malloc(sizeof(PROCTAB));
+	PROCTAB *PT = (PROCTAB *)malloc(sizeof(PROCTAB));
 
 	PT->taskdir = NULL;
 	PT->taskdir_user = -1;
@@ -1216,6 +1216,7 @@ static proc_t **procs_refresh (proc_t **table, int flags){
 
 	if(table == NULL){
 		proc_table_size = 10;
+		printf("procs_refresh\n");
 		table = (proc_t **)malloc(sizeof(proc_t *) * 10);
 	}
 
