@@ -1321,10 +1321,10 @@ static proc_t **summary_show (void){
 	static CPU_t *smpcpu = NULL;
 
 	if(!p_table){
-		p_table = procs_refresh(NULL, 0);
+		p_table = procs_refresh(NULL, PROC_FILLSTATUS);
 	}
 	else{
-		p_table = procs_refresh(p_table, 0);
+		p_table = procs_refresh(p_table, PROC_FILLSTATUS);
 	}
 
 	smpcpu = cpus_refresh(smpcpu);
