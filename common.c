@@ -1312,6 +1312,87 @@ static int compare_mem_table_structs(const void *a, const void *b){
   return strcmp(((const mem_table_struct*)a)->name,((const mem_table_struct*)b)->name);
 }
 
+void meminfo(void){
+  char namebuf[16]; /* big enough to hold any row name */
+  mem_table_struct findme = { namebuf, NULL};
+  mem_table_struct *found;
+  char *head;
+  char *tail;
+  static const mem_table_struct mem_table[] = {
+  {"Active",       &kb_active},       // important
+  {"AnonPages",    &kb_anon_pages},
+  {"Bounce",       &kb_bounce},
+  {"Buffers",      &kb_main_buffers}, // important
+  {"Cached",       &kb_main_cached},  // important
+  {"CommitLimit",  &kb_commit_limit},
+  {"Committed_AS", &kb_committed_as},
+  {"Dirty",        &kb_dirty},        // kB version of vmstat nr_dirty
+  {"HighFree",     &kb_high_free},
+  {"HighTotal",    &kb_high_total},
+  {"Inact_clean",  &kb_inact_clean},
+  {"Inact_dirty",  &kb_inact_dirty},
+  {"Inact_laundry",&kb_inact_laundry},
+  {"Inact_target", &kb_inact_target},
+  {"Inactive",     &kb_inactive},     // important
+  {"LowFree",      &kb_low_free},
+  {"LowTotal",     &kb_low_total},
+  {"Mapped",       &kb_mapped},       // kB version of vmstat nr_mapped
+  {"MemFree",      &kb_main_free},    // important
+  {"MemShared",    &kb_main_shared},  // important, but now gone!
+  {"MemTotal",     &kb_main_total},   // important
+  {"NFS_Unstable", &kb_nfs_unstable},
+  {"PageTables",   &kb_pagetables},   // kB version of vmstat nr_page_table_pages
+  {"ReverseMaps",  &nr_reversemaps},  // same as vmstat nr_page_table_pages
+  {"SReclaimable", &kb_swap_reclaimable}, // "swap reclaimable" (dentry and inode structures)
+  {"SUnreclaim",   &kb_swap_unreclaimable},
+  {"Slab",         &kb_slab},         // kB version of vmstat nr_slab
+  {"SwapCached",   &kb_swap_cached},
+  {"SwapFree",     &kb_swap_free},    // important
+  {"SwapTotal",    &kb_swap_total},   // important
+  {"VmallocChunk", &kb_vmalloc_chunk},
+  {"VmallocTotal", &kb_vmalloc_total},
+  {"VmallocUsed",  &kb_vmalloc_used},
+  {"Writeback",    &kb_writeback},    // kB version of vmstat nr_writeback
+  };
+  const int mem_table_count = sizeof(mem_table)/sizeof(mem_table_struct);
+
+  FILE_TO_BUF(MEMINFO_FILE,meminfo_fd);
+
+  kb_inactive = ~0UL;
+
+  head = buf;
+  for(;;){
+    tail = strchr(head, ':');
+    if(!tail) break;
+    *tail = '\0';
+    if(strlen(head) >= sizeof(namebuf)){
+      head = tail+1;
+      goto nextline;
+    }
+    strcpy(namebuf,head);
+    found = bsearch(&findme, mem_table, mem_table_count,
+        sizeof(mem_table_struct), compare_mem_table_structs
+    );
+    head = tail+1;
+    if(!found) goto nextline;
+    *(found->slot) = strtoul(head,&tail,10);
+nextline:
+    tail = strchr(head, '\n');
+    if(!tail) break;
+    head = tail+1;
+  }
+  if(!kb_low_total){  /* low==main except with large-memory support */
+    kb_low_total = kb_main_total;
+    kb_low_free  = kb_main_free;
+  }
+  if(kb_inactive==~0UL){
+    kb_inactive = kb_inact_dirty + kb_inact_clean + kb_inact_laundry;
+  }
+  kb_swap_used = kb_swap_total - kb_swap_free;
+  kb_main_used = kb_main_total - kb_main_free;
+}
+
+
 static void show_special(int interact, const char *glob){
 	char *line_end, line[2048];
 	long long cols;
