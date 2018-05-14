@@ -58,6 +58,7 @@ static int vminfo_fd = -1;
 #endif
 
 #define P_G_SZ 20
+
 #define PUTT(fmt,arg...) do { \
       char _str[ROWBUFSIZ]; \
       snprintf(_str, sizeof(_str), fmt, ## arg); \
@@ -99,6 +100,7 @@ static int vminfo_fd = -1;
 
 typedef unsigned long long TIC_t;
 typedef          long long SIC_t;
+typedef long long KLONG;
 
 typedef struct proc_t {
 // 1st 16 bytes
