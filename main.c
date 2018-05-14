@@ -2,7 +2,7 @@
 
 int main(){
 	init();
-	int cnt = 10;
+	int cnt = 10000;
 	while(cnt--){
 		frame();
 	}
