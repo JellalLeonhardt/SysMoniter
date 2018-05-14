@@ -1233,6 +1233,7 @@ static proc_t **procs_refresh (proc_t **table, int flags){
 			break;
 		}
 	}
+	printf("procs_refresh\n");
 	return table;
 		
 }
