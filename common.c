@@ -1,8 +1,8 @@
 #include "common.h"
 
 #define direct dirent
-
-
+#define KLF "L"
+#define SIGNAL_STRING
 #define PROC_FILLMEM         0x0001 // read statm
 #define PROC_FILLCOM         0x0002 // alloc and fill in `cmdline'
 #define PROC_FILLENV         0x0004 // alloc and fill in `environ'
@@ -60,14 +60,59 @@ static int vminfo_fd = -1;
    " %8luk \02total,\03 %8luk \02used,\03 %8luk \02free,\03 %8luk \02cached\03\n"
 #endif
 
+#define BAD_OPEN_MESSAGE					\
+"Error: /proc must be mounted\n"				\
+"  To mount /proc at boot you need an /etc/fstab line like:\n"	\
+"      /proc   /proc   proc    defaults\n"			\
+"  In the meantime, run \"mount /proc /proc -t proc\"\n"
+
 #define P_G_SZ 20
+
+#define CACHE_TWEAK_FACTOR 64
+
+// Miscellaneous buffer sizes with liberal values -- mostly
+// just to pinpoint source code usage/dependancies
+#define SCREENMAX ( 512 + CACHE_TWEAK_FACTOR)
+// the above might seem pretty stingy, until you consider that with every
+// one of top's fields displayed we're talking a 160 byte column header --
+// so that will provide for all fields plus a 350+ byte command line
+#define WINNAMSIZ     4
+#define CAPTABMAX     9
+#define PFLAGSSIZ    32
+#define CAPBUFSIZ    32
+#define CLRBUFSIZ    64
+#define GETBUFSIZ    32
+#define TNYBUFSIZ    32
+#define SMLBUFSIZ ( 256 + CACHE_TWEAK_FACTOR)
+#define OURPATHSZ (1024 + CACHE_TWEAK_FACTOR)
+#define MEDBUFSIZ (1024 + CACHE_TWEAK_FACTOR)
+#define BIGBUFSIZ (2048 + CACHE_TWEAK_FACTOR)
+#define USRNAMSIZ  GETBUFSIZ
+#define ROWBUFSIZ  SCREENMAX + CLRBUFSIZ
 
 #define PUTT(fmt,arg...) do { \
       char _str[ROWBUFSIZ]; \
       snprintf(_str, sizeof(_str), fmt, ## arg); \
       putp(_str); \
    } while (0)
-   
+
+#define PUFF(fmt,arg...)                               \
+do {                                                     \
+   char _str[ROWBUFSIZ];                                   \
+   char *_ptr;                                               \
+   int _len = 1 + snprintf(_str, sizeof(_str), fmt, ## arg);   \
+   if (Batch) _ptr = _str;                                   \
+   else {                                                 \
+      _ptr = &Pseudo_scrn[Pseudo_row++ * Pseudo_cols];  \
+      if (memcmp(_ptr, _str, _len)) {                \
+         memcpy(_ptr, _str, _len);                \
+      } else {                                 \
+         _ptr = "\n";                       \
+      }                                 \
+   }                                \
+   putp(_ptr);                   \
+} while (0)
+
 #define FILE_TO_BUF(filename, fd) do{				\
     static int local_n;						\
     if (fd == -1 && (fd = open(filename, O_RDONLY)) == -1) {	\
@@ -104,6 +149,7 @@ static int vminfo_fd = -1;
 typedef unsigned long long TIC_t;
 typedef          long long SIC_t;
 typedef long long KLONG;
+typedef int (*QFP_t)(const void *, const void *);
 
 typedef struct proc_t {
 // 1st 16 bytes
@@ -231,6 +277,14 @@ typedef struct PROCTAB {
 		unsigned pathlen;        // length of string in the above (w/o '\0')
 }PROCTAB;
 
+typedef struct RCF_t {  // the complete rcfile (new style)
+   int    mode_altscr;          // 'A' - Alt display mode (multi task windows)
+   int    mode_irixps;          // 'I' - Irix vs. Solaris mode (SMP-only)
+   float  delay_time;           // 'd' or 's' - How long to sleep twixt updates
+   int    win_index;            // Curwin, as index
+   RCW_t  win [4];              // a 'WIN_t.rc' for each of the 4 windows
+} RCF_t;
+
 typedef struct HST_t {
    TIC_t tics;
    int   pid;
@@ -332,10 +386,16 @@ static int proc_table_size;
 
 static int Cpu_tot;
 
+static RCF_t Rc = DEF_RCFILE;
+
+static char buf[2048];
+
 extern void __cyg_profile_func_enter(void*, void*);
 extern void	__cyg_profile_func_exit(void *, void *);
 
 static void show_special(int interact, const char *glob);
+
+static unsigned long long unhex(const char *__restrict cp);
 
 static const char *fmtmk (const char *fmts, ...)
 {
@@ -367,7 +427,7 @@ static int simple_nexttid(PROCTAB *__restrict const PT, const proc_t *__restrict
 	t->tid = strtoul(ent->d_name, NULL, 10);
 	t->tgid = p->tgid;
 	t->ppid = p->ppid;  // cover for kernel behavior? we want both actually...?
-	snprintf(path, PROCPATHLEN, "/proc/%d/task/%s", p->tgid, ent->d_name);
+	snprintf(path, 64, "/proc/%d/task/%s", p->tgid, ent->d_name);
 	return 1;
 }
 
@@ -438,7 +498,7 @@ static void stat2proc(const char *S, proc_t *__restrict P){
 	);
 
 	if(!P->nlwp){
-		p->nlwp = 1;
+		P->nlwp = 1;
 	}
 
 	__cyg_profile_func_exit((void *)0x160, (void *)0x160);
@@ -487,12 +547,12 @@ char *group_from_gid(gid_t gid) {
 	return((*g)->name);
 }
 
-static proc_t* simple_readtask(PROCTAB *__restrict const PT, const proc_t *__restrict const p, proc_t *__restrict const t, char *__restrict const path) {
+static proc_t* simple_readtask(PROCTAB *__restrict const PT, const proc_t *__restrict const P, proc_t *__restrict const t, char *__restrict const path) {
 	    static struct stat sb;		// stat() buffer
 		static char sbuf[1024];	// buffer for stat,statm
 		unsigned flags = PT->flags;
 
-		if(stat(path, &b) == -1){
+		if(stat(path, &sb) == -1){
 			goto next_task;
 		}
 
@@ -525,18 +585,18 @@ static proc_t* simple_readtask(PROCTAB *__restrict const PT, const proc_t *__res
 		if(flags & 0x0008){
 			memcpy(t->euser, user_from_uid(t->euid), sizeof(t->euser));
 			if(flags & 0x0020){
-				memcpy(t->rgroupe, user_frome_uid(t->euid), sizeof(t->euser));
-				memcpy(t->sgroupe, user_frome_uid(t->suid), sizeof(t->suser));
-				memcpy(t->fgroupe, user_frome_uid(t->fuid), sizeof(t->fuser));
+				memcpy(t->rgroup, user_frome_uid(t->euid), sizeof(t->euser));
+				memcpy(t->sgroup, user_frome_uid(t->suid), sizeof(t->suser));
+				memcpy(t->fgroup, user_frome_uid(t->fuid), sizeof(t->fuser));
 			}
 		}
 
 		if(flags & 0x0010){
 			memcpy(t->euser, user_from_uid(t->euid), sizeof(t->euser));
 			if(flags & 0x0020){
-				memcpy(t->rgroupe, user_frome_uid(t->euid), sizeof(t->euser));
-				memcpy(t->sgroupe, user_frome_uid(t->suid), sizeof(t->suser));
-				memcpy(t->fgroupe, user_frome_uid(t->fuid), sizeof(t->fuser));
+				memcpy(t->rgroup, user_frome_uid(t->euid), sizeof(t->euser));
+				memcpy(t->sgroup, user_frome_uid(t->suid), sizeof(t->suser));
+				memcpy(t->fgroup, user_frome_uid(t->fuid), sizeof(t->fuser));
 			}
 		}
 
@@ -662,7 +722,7 @@ ENTER(0x220);
         colon = strchr(S, ':');
         if(!colon) break;
         if(colon[1]!='\t') break;
-        if(colon-S != entry.len)) continue;
+        if(colon-S != entry.len) continue;
         if(memcmp(entry.name,S,colon-S)) continue;
 
         S = colon+2; // past the '\t'
@@ -777,16 +837,10 @@ ENTER(0x220);
 
 
     // recent kernels supply per-tgid pending signals
-#ifdef SIGNAL_STRING
     if(!is_proc || !P->signal[0]){
 	memcpy(P->signal, P->_sigpnd, 16);
 	P->signal[16] = '\0';
     }
-#else
-    if(!is_proc || !have_process_pending){
-	P->signal = P->_sigpnd;
-    }
-#endif
 
     // Linux 2.4.13-pre1 to max 2.4.xx have a useless "Tgid"
     // that is not initialized for built-in kernel tasks.
@@ -936,7 +990,7 @@ static int listed_nextpid(PROCTAB *__restrict const PT, proc_t *__restrict const
   char *__restrict const path = PT->path;
   pid_t tgid = *(PT->pids)++;
   if( tgid ){
-    snprintf(path, PROCPATHLEN, "/proc/%d", tgid);
+    snprintf(path, 64, "/proc/%d", tgid);
     p->tgid = tgid;
     p->tid = tgid;  // they match for leaders
   }
@@ -964,7 +1018,7 @@ PROCTAB *openproc(int flags){	//可变参数那部分删除
 
 	PT->taskdir = NULL;
 	PT->taskdir_user = -1;
-	PT->taskfinder = simple_nextid;
+	PT->taskfinder = simple_nexttid;
 	PT->taskreader = simple_readtask;
 
 	PT->reader = simple_readproc;
@@ -993,7 +1047,7 @@ proc_t* readproc(PROCTAB *__restrict const PT, proc_t *__restrict p) {
 //  }
 
   saved_p = p;
-  if(!p) p = (proc_t *)malloc(p, sizeof *p); /* passed buf or alloced mem */
+  if(!p) p = (proc_t *)malloc(p, sizeof(*p)); /* passed buf or alloced mem */
 
   for(;;){
     // fills in the path, plus p->tid and p->tgid
@@ -1008,6 +1062,11 @@ out:
   if(!saved_p) free(p);
   // FIXME: maybe set tid to -1 here, for "-" in display?
   return NULL;
+}
+
+static int sort_HST_t (const HST_t *P, const HST_t *Q)
+{
+   return P->pid - Q->pid;
 }
 
 static void prochlp (proc_t *this)
@@ -1032,7 +1091,7 @@ static void prochlp (proc_t *this)
       oldtimev.tv_usec = timev.tv_usec;
 
       // if in Solaris mode, adjust our scaling for all cpus
-      Frame_tscale = 100.0f / ((float)Hertz * (float)et * (Rc.mode_irixps ? 1 : Cpu_tot));
+      Frame_tscale = 100.0f / ((float)(unsigned long long) * (float)et * (Rc.mode_irixps ? 1 : Cpu_tot));
       maxt_sav = Frame_maxtask;
       Frame_maxtask = Frame_running = Frame_sleepin = Frame_stopped = Frame_zombied = 0;
 
@@ -1170,7 +1229,7 @@ static CPU_t *cpus_refresh (CPU_t *cpus)
    int i;
    int num;
    // enough for a /proc/stat CPU line (not the intr line)
-   char buf[SMLBUFSIZ];
+   char buf[2048];
 
    /* by opening this file once, we'll avoid the hit on minor page faults
       (sorry Linux, but you'll have to close it for us) */
@@ -1180,7 +1239,7 @@ static CPU_t *cpus_refresh (CPU_t *cpus)
       /* note: we allocate one more CPU_t than Cpu_tot so that the last slot
                can hold tics representing the /proc/stat cpu summary (the first
                line read) -- that slot supports our View_CPUSUM toggle */
-      cpus = (CPU_t *)realloc((1 + Cpu_tot) * sizeof(CPU_t));
+      cpus = (CPU_t *)realloc(cpus, (1 + Cpu_tot) * sizeof(CPU_t));
    }
    rewind(fp);
    fflush(fp);
@@ -1316,8 +1375,8 @@ static void show_special(int interact, const char *glob){
 		cols = line_end - glob;
 		memcpy(line, glob, cols);
 		line[cols] = '\0';
-		if (interact) PUTT("%s%s\n", row, clr_eol);
-      	else PUFF("%s%s\n", row, clr_eol);
+		if (interact) PUTT("%s%s\n", line, clr_eol);
+      	else PUFF("%s%s\n", line, clr_eol);
 		glob = line_end + 1;
 	}
 	if (*glob) PUTT("%s", glob);
@@ -1331,7 +1390,7 @@ static proc_t **summary_show (void){
 		p_table = procs_refresh(NULL, 0);
 	}
 	else{
-		p_table = procs_refresh(p_table, 0;
+		p_table = procs_refresh(p_table, 0);
 	}
 
 	smpcpu = cpus_refresh(smpcpu);
