@@ -1225,6 +1225,8 @@ static proc_t **procs_refresh (proc_t **table, int flags){
 		table = (proc_t **)malloc(sizeof(proc_t *) * 10);
 	}
 
+	Frame_maxtask = Frame_running = Frame_sleepin = Frame_stopped = Frame_zombied = 0;
+	
 	while(1){
 		if((ptsk = readproc(PT, NULL)) != NULL){
 			prochlp(ptsk);
