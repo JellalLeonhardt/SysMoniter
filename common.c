@@ -598,18 +598,18 @@ static proc_t* simple_readtask(PROCTAB *__restrict const PT, const proc_t *__res
 		if(flags & 0x0008){
 			memcpy(t->euser, user_from_uid(t->euid), sizeof(t->euser));
 			if(flags & 0x0020){
-				memcpy(t->rgroup, user_frome_uid(t->euid), sizeof(t->euser));
-				memcpy(t->sgroup, user_frome_uid(t->suid), sizeof(t->suser));
-				memcpy(t->fgroup, user_frome_uid(t->fuid), sizeof(t->fuser));
+				memcpy(t->rgroup, user_from_uid(t->euid), sizeof(t->euser));
+				memcpy(t->sgroup, user_from_uid(t->suid), sizeof(t->suser));
+				memcpy(t->fgroup, user_from_uid(t->fuid), sizeof(t->fuser));
 			}
 		}
 
 		if(flags & 0x0010){
 			memcpy(t->euser, user_from_uid(t->euid), sizeof(t->euser));
 			if(flags & 0x0020){
-				memcpy(t->rgroup, user_frome_uid(t->euid), sizeof(t->euser));
-				memcpy(t->sgroup, user_frome_uid(t->suid), sizeof(t->suser));
-				memcpy(t->fgroup, user_frome_uid(t->fuid), sizeof(t->fuser));
+				memcpy(t->rgroup, user_from_uid(t->euid), sizeof(t->euser));
+				memcpy(t->sgroup, user_from_uid(t->suid), sizeof(t->suser));
+				memcpy(t->fgroup, user_from_uid(t->fuid), sizeof(t->fuser));
 			}
 		}
 
