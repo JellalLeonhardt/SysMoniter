@@ -391,6 +391,8 @@ static void show_special(int interact, const char *glob);
 
 static unsigned long long unhex(const char *__restrict cp);
 
+static void status2proc(char *S, proc_t *__restrict P, int is_proc);
+
 static const char *fmtmk (const char *fmts, ...)
 {
    static char buf[2048];          // with help stuff, our buffer
@@ -1320,7 +1322,6 @@ static proc_t **summary_show (void){
 }	
 
 void init(void){
-	old_Hertz_hack()
 	setupterm(NULL, STDOUT_FILENO, NULL);
 	putp(clear_screen);
 	putp("This is for test\ncol1\ncol2\n");
