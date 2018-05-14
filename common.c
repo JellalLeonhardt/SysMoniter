@@ -1427,7 +1427,7 @@ static proc_t **summary_show (void){
 	#endif
 	summaryhlp(&smpcpu[Cpu_tot], "Cpu(s):");
 
-	//meminfo();
+	meminfo();
 	show_special(0, fmtmk(MEMORY_line1, kb_main_total, kb_main_used, kb_main_free, kb_main_buffers));
 	#ifdef STEP
 	getchar();
