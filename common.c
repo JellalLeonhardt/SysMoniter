@@ -264,7 +264,7 @@ static int file2str(const char *directory, const char *what, char *ret, int cap)
 	int fd, num_read;
 
 	sprintf(filename, "%s/%s", directory, what);
-	fd = open(filename, O_READONLY, 0);
+	fd = open(filename, O_RDONLY, 0);
 	if(fd == -1) return -1;
 	num_read = read(fd, ret, cap - 1);
 	close(fd);

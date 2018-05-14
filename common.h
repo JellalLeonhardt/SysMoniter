@@ -1,3 +1,4 @@
+
 #ifndef _COMMON_H
 #define _COMMON_H
 
@@ -15,6 +16,7 @@
 #include <fcntl.h>
 #include <pwd.h>
 #include <dirent.h>
+#include <linux/proc_fs.h>
 
 void frame(void);
 void init(void);
