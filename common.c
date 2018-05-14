@@ -1116,7 +1116,7 @@ static void prochlp (proc_t *this)
       qsort(hist_sav, maxt_sav, sizeof(HST_t), (QFP_t)sort_HST_t);
       return;
    }
-
+   printf("prochlp:%c\n", this->state);
    switch (this->state) {
       case 'R':
          Frame_running++;
@@ -1328,13 +1328,15 @@ static proc_t **summary_show (void){
 	}
 
 	smpcpu = cpus_refresh(smpcpu);
-	
+	getchar();
 	show_special(0, fmtmk(STATES_line1, Frame_maxtask, Frame_running, Frame_sleepin, Frame_stopped, Frame_zombied));
+	getchar();
 
 	summaryhlp(&smpcpu[Cpu_tot], "Cpu(s):");
 
 	//meminfo();
 	show_special(0, fmtmk(MEMORY_line1, kb_main_total, kb_main_used, kb_main_free, kb_main_buffers));
+	getchar();
     show_special(0, fmtmk(MEMORY_line2, kb_swap_total, kb_swap_used, kb_swap_free, kb_main_cached));
 
 	return p_table;
