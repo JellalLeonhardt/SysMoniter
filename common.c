@@ -1,5 +1,6 @@
 #include "common.h"
 
+#define DEBUG 0
 #define direct dirent
 #define KLF "L"
 #define SIGNAL_STRING
@@ -1116,7 +1117,9 @@ static void prochlp (proc_t *this)
       qsort(hist_sav, maxt_sav, sizeof(HST_t), (QFP_t)sort_HST_t);
       return;
    }
+   #if DEBUG
    printf("prochlp:%c\n", this->state);
+   #endif
    switch (this->state) {
       case 'R':
          Frame_running++;
@@ -1216,7 +1219,9 @@ static proc_t **procs_refresh (proc_t **table, int flags){
 
 	if(table == NULL){
 		proc_table_size = 10;
+		#if DEBUG
 		printf("procs_refresh\n");
+		#endif
 		table = (proc_t **)malloc(sizeof(proc_t *) * 10);
 	}
 
@@ -1233,7 +1238,9 @@ static proc_t **procs_refresh (proc_t **table, int flags){
 			break;
 		}
 	}
+	#if DEBUG
 	printf("procs_refresh\n");
+	#endif
 	return table;
 		
 }
@@ -1328,15 +1335,20 @@ static proc_t **summary_show (void){
 	}
 
 	smpcpu = cpus_refresh(smpcpu);
+	#ifdef STEP
 	getchar();
+	#endif
 	show_special(0, fmtmk(STATES_line1, Frame_maxtask, Frame_running, Frame_sleepin, Frame_stopped, Frame_zombied));
+	#ifdef STEP
 	getchar();
-
+	#endif
 	summaryhlp(&smpcpu[Cpu_tot], "Cpu(s):");
 
 	//meminfo();
 	show_special(0, fmtmk(MEMORY_line1, kb_main_total, kb_main_used, kb_main_free, kb_main_buffers));
+	#ifdef STEP
 	getchar();
+	#endif
     show_special(0, fmtmk(MEMORY_line2, kb_swap_total, kb_swap_used, kb_swap_free, kb_main_cached));
 
 	return p_table;
