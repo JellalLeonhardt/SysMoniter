@@ -1357,6 +1357,7 @@ void taskInfo(void){
 void frame(void){
 	putp(tgoto(cursor_address, 0, 3));
 	//putp(clear_screen);
+	summary_show();
 	putp(clr_eol);
 	strcat(str,"AS");
 	str[0] += 1;
