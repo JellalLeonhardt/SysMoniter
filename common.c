@@ -100,26 +100,6 @@ static int vminfo_fd = -1;
 typedef unsigned long long TIC_t;
 typedef          long long SIC_t;
 
-typedef struct PROCTAB {
-	    DIR*	procfs;
-		DIR*	taskdir;  // for threads
-		pid_t	taskdir_user;  // for threads
-		int         did_fake; // used when taskdir is missing
-		int (*finder)(struct PROCTAB *__restrict const, proc_t *__restrict const);
-		proc_t* (*reader)(struct PROCTAB *__restrict const, proc_t *__restrict const);
-		int (*taskfinder)(struct PROCTAB *__restrict const, const proc_t *__restrict const, proc_t *__restrict const, char *__restrict const);
-		proc_t* (*taskreader)(struct PROCTAB *__restrict const, const proc_t *__restrict const, proc_t *__restrict const, char *__restrict const);
-		pid_t*	pids;	// pids of the procs
-		uid_t*	uids;	// uids of procs
-		int		nuid;	// cannot really sentinel-terminate unsigned short[]
-		int         i;  // generic
-		unsigned	flags;
-		unsigned    u;  // generic
-		void *      vp; // generic
-		char        path[PROCPATHLEN];  // must hold /proc/2000222000/task/2000222000/cmdline
-		unsigned pathlen;        // length of string in the above (w/o '\0')
-}PROCTAB;
-
 typedef struct proc_t {
 // 1st 16 bytes
     int
@@ -226,6 +206,25 @@ typedef struct proc_t {
 	processor;      // stat            current (or most recent?) CPU
 } proc_t;
 
+typedef struct PROCTAB {
+	    DIR*	procfs;
+		DIR*	taskdir;  // for threads
+		pid_t	taskdir_user;  // for threads
+		int         did_fake; // used when taskdir is missing
+		int (*finder)(struct PROCTAB *__restrict const, proc_t *__restrict const);
+		proc_t* (*reader)(struct PROCTAB *__restrict const, proc_t *__restrict const);
+		int (*taskfinder)(struct PROCTAB *__restrict const, const proc_t *__restrict const, proc_t *__restrict const, char *__restrict const);
+		proc_t* (*taskreader)(struct PROCTAB *__restrict const, const proc_t *__restrict const, proc_t *__restrict const, char *__restrict const);
+		pid_t*	pids;	// pids of the procs
+		uid_t*	uids;	// uids of procs
+		int		nuid;	// cannot really sentinel-terminate unsigned short[]
+		int         i;  // generic
+		unsigned	flags;
+		unsigned    u;  // generic
+		void *      vp; // generic
+		char        path[PROCPATHLEN];  // must hold /proc/2000222000/task/2000222000/cmdline
+		unsigned pathlen;        // length of string in the above (w/o '\0')
+}PROCTAB;
 
 typedef struct HST_t {
    TIC_t tics;
