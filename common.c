@@ -393,6 +393,23 @@ static unsigned long long unhex(const char *__restrict cp);
 
 static void status2proc(char *S, proc_t *__restrict P, int is_proc);
 
+static void std_err (const char *str)
+{
+   static char buf[SMLBUFSIZ];
+
+   fflush(stdout);
+   /* we'll use our own buffer so callers can still use fmtmk() and, yes the
+      leading tab is not the standard convention, but the standard is wrong
+      -- OUR msg won't get lost in screen clutter, like so many others! */
+   snprintf(buf, sizeof(buf), "\t%s: %s\n", Myname, str);
+   if (!Ttychanged) {
+      fprintf(stderr, "%s\n", buf);
+      exit(1);
+   }
+      /* not to worry, he'll change our exit code to 1 due to 'buf' */
+   bye_bye(stderr, 1, buf);
+}
+
 static const char *fmtmk (const char *fmts, ...)
 {
    static char buf[2048];          // with help stuff, our buffer
@@ -878,7 +895,7 @@ static char** file2strvec(const char* directory, const char* what) {
 	}
 	if (end_of_file && buf[n-1])		/* last read char not null */
 	    buf[n++] = '\0';			/* so append null-terminator */
-	rbuf = xrealloc(rbuf, tot + n);		/* allocate more memory */
+	rbuf = realloc(rbuf, tot + n);		/* allocate more memory */
 	memcpy(rbuf + tot, buf, n);		/* copy buffer into it */
 	tot += n;				/* increment total byte ctr */
 	if (end_of_file)
@@ -896,7 +913,7 @@ static char** file2strvec(const char* directory, const char* what) {
 	    c += sizeof(char*);
     c += sizeof(char*);				/* one extra for NULL term */
 
-    rbuf = xrealloc(rbuf, tot + c + align);	/* make room for ptrs AT END */
+    rbuf = realloc(rbuf, tot + c + align);	/* make room for ptrs AT END */
     endbuf = rbuf + tot;			/* addr just past data buf */
     q = ret = (char**) (endbuf+align);		/* ==> free(*ret) to dealloc */
     *q++ = p = rbuf;				/* point ptrs to the strings */
@@ -1314,7 +1331,7 @@ static proc_t **summary_show (void){
 
 	summaryhlp(&smpcpu[Cpu_tot], "Cpu(s):");
 
-	meminfo();
+	//meminfo();
 	show_special(0, fmtmk(MEMORY_line1, kb_main_total, kb_main_used, kb_main_free, kb_main_buffers));
     show_special(0, fmtmk(MEMORY_line2, kb_swap_total, kb_swap_used, kb_swap_free, kb_main_cached));
 
