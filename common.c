@@ -1212,7 +1212,7 @@ static void summaryhlp (CPU_t *cpu, const char *pfx)
 static proc_t **procs_refresh (proc_t **table, int flags){
 	PROCTAB *PT = PT = openproc(flags);
 	proc_t *ptsk;
-	int idx;
+	int idx = 0;
 
 	if(table == NULL){
 		proc_table_size = 10;
