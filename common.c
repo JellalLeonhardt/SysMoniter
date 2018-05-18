@@ -1160,7 +1160,7 @@ static void prochlp (proc_t *this)
    ptr = bsearch(&tmp, hist_sav, maxt_sav, sizeof tmp, sort_HST_t);
    if(ptr) {
    	tics -= ptr->tics;
-	message_show(fmtmk("ptr not null tics=%d", tics))
+	message_show(fmtmk("ptr not null tics=%d", tics));
    }
    // we're just saving elapsed tics, to be converted into %cpu if
    // this task wins it's displayable screen row lottery... */
