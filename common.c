@@ -1451,15 +1451,8 @@ void init(void){
 	putp(cursor_invisible);
 	putp("This is for test\ncol1\ncol2\n");
 	Cpu_tot = sysconf(_SC_NPROCESSORS_ONLN);
+	MessageShow("Message:init complete");
 	getchar();
-}
-
-void sysInfo(void){
-
-}
-
-void taskInfo(void){
-
 }
 
 void frame(void){
