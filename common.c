@@ -1458,7 +1458,7 @@ static proc_t **summary_show (void){
 
 void task_show(proc_t *task){
 	putp(tgoto(cursor_address, 0, row_to_show));
-	show_special(0, fmtmk(TASK_line, task->tid, task->pcpu, task->size, task->vm_size, task->ruser));
+	show_special(0, fmtmk(TASK_line, task->tid, task->pcpu, task->size, task->vm_size, task->euser));
 	putp(tgoto(cursor_address, 0, 3));
 }
 
