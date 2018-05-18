@@ -38,8 +38,8 @@ static int meminfo_fd = -1;
 static int vminfo_fd = -1;
 
 //缓冲、缓冲缓冲区和命令未加入
-#define TASK_TITLE "PID\tpcpu\tmem\tswap\tuser"
-#define TASK_line "%d\t%u\t%ld\t%ld\t%s"
+#define TASK_TITLE "PID\tpcpu\tmem\tpmem\tswap\teuser\tutime\tesize\tdssize\tppid\truser\tegroup\tcmd"
+#define TASK_line "%d\t%u\t%ld\t%f\t%ld\t%s\t%lld\t%ld\t%ld\t%d\t%s\t%s\t%s"
 #define LOADAV_line  "%s -%s\n"
 #define LOADAV_line_alt  "%s\06 -%s\n"
 #define STATES_line1  "Tasks:\03" \
@@ -1427,10 +1427,10 @@ static proc_t **summary_show (void){
 	static CPU_t *smpcpu = NULL;
 
 	if(!p_table){
-		p_table = procs_refresh(NULL, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
+		p_table = procs_refresh(NULL, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR | PROC_FILLCOM);
 	}
 	else{
-		p_table = procs_refresh(p_table, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
+		p_table = procs_refresh(p_table, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR | PROC_FILLCOM);
 	}
 
 	smpcpu = cpus_refresh(smpcpu);
@@ -1458,7 +1458,7 @@ static proc_t **summary_show (void){
 
 void task_show(proc_t *task){
 	putp(tgoto(cursor_address, 0, row_to_show));
-	show_special(0, fmtmk(TASK_line, task->tid, task->pcpu, task->size, task->vm_size, task->euser));
+	show_special(0, fmtmk(TASK_line, task->tid, task->pcpu, task->size, task->vm_size, task->euser, task->utime, task->vm_exem, task->vm_data + task->vm_stack, task->ppid, task->ruser, task->egroup, task->cmdline));
 	putp(tgoto(cursor_address, 0, 3));
 }
 
