@@ -37,6 +37,8 @@ static int meminfo_fd = -1;
 #define VMINFO_FILE "/proc/vmstat"
 static int vminfo_fd = -1;
 
+#define TASK_TITLE "PID\tpcpu\tmem\tswap\tuser" 	\\缓冲、缓冲缓冲区和命令未加入
+#define TASK_line "%d\t%u\t%ld\t%ld\t%s"
 #define LOADAV_line  "%s -%s\n"
 #define LOADAV_line_alt  "%s\06 -%s\n"
 #define STATES_line1  "Tasks:\03" \
@@ -384,6 +386,8 @@ static int Cpu_tot;
 
 static char buf[2048];
 
+static int row_to_show = 7;
+
 static unsigned long long Hertz;
 extern void __cyg_profile_func_enter(void*, void*);
 extern void	__cyg_profile_func_exit(void *, void *);
@@ -393,6 +397,8 @@ static void show_special(int interact, const char *glob);
 static unsigned long long unhex(const char *__restrict cp);
 
 static void status2proc(char *S, proc_t *__restrict P, int is_proc);
+
+void task_show(proc_t *task);
 
 static void std_err (const char *str)
 {
@@ -1216,7 +1222,10 @@ static proc_t **procs_refresh (proc_t **table, int flags){
 	PROCTAB *PT = PT = openproc(flags);
 	proc_t *ptsk;
 	int idx = 0;
-
+	row_to_show = 7;
+	task_title_show();
+	row_to_show = 8;
+	
 	if(table == NULL){
 		proc_table_size = 10;
 		#if DEBUG
@@ -1230,6 +1239,8 @@ static proc_t **procs_refresh (proc_t **table, int flags){
 	while(1){
 		if((ptsk = readproc(PT, NULL)) != NULL){
 			prochlp(ptsk);
+			task_show(ptsk);
+			row_to_show++;
 			table[idx++] = ptsk;
 			if(idx == proc_table_size){
 				proc_table_size = proc_table_size * 2;
@@ -1436,6 +1447,18 @@ static proc_t **summary_show (void){
 
 	return p_table;
 }	
+
+void task_show(proc_t *task){
+	putp(tgoto(cursor_address, 0, row_to_show));
+	show_special(0, fmtmk(TASK_line, task->tid, task->pcpu, task->size, task->vm_size, task->ruser));
+	putp(tgoto(cursor_address, 0, 3));
+}
+
+void task_title_show(proc_t *task){
+	putp(tgoto(cursor_address, 0, row_to_show));
+	show_special(0, TASK_TITLE);
+	putp(tgoto(cursor_address, 0, 3));
+}
 
 void init(void){
 	setupterm(NULL, STDOUT_FILENO, NULL);
