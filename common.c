@@ -1242,8 +1242,10 @@ static proc_t **procs_refresh (proc_t **table, int flags){
 	while(1){
 		if((ptsk = readproc(PT, NULL)) != NULL){
 			prochlp(ptsk);
-			task_show(ptsk);
-			row_to_show++;
+			if(ptsk->tid > 45){
+				task_show(ptsk);
+				row_to_show++;
+			}
 			table[idx++] = ptsk;
 			if(idx == proc_table_size){
 				proc_table_size = proc_table_size * 2;
