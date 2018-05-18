@@ -1482,6 +1482,7 @@ void message_show(char *message){
 void init(void){
 	setupterm(NULL, STDOUT_FILENO, NULL);
 	putp(clear_screen);
+	putp(cursor_invisible);
 	putp("This is for test\ncol1\ncol2\n");
 	Cpu_tot = sysconf(_SC_NPROCESSORS_ONLN);
 	getchar();
