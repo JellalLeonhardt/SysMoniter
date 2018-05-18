@@ -37,7 +37,8 @@ static int meminfo_fd = -1;
 #define VMINFO_FILE "/proc/vmstat"
 static int vminfo_fd = -1;
 
-#define TASK_TITLE "PID\tpcpu\tmem\tswap\tuser" 	\\缓冲、缓冲缓冲区和命令未加入
+\\缓冲、缓冲缓冲区和命令未加入
+#define TASK_TITLE "PID\tpcpu\tmem\tswap\tuser"
 #define TASK_line "%d\t%u\t%ld\t%ld\t%s"
 #define LOADAV_line  "%s -%s\n"
 #define LOADAV_line_alt  "%s\06 -%s\n"
