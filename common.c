@@ -396,20 +396,20 @@ static unsigned long long Hertz;
 extern void __cyg_profile_func_enter(void*, void*);
 extern void	__cyg_profile_func_exit(void *, void *);
 
-static void show_special(int interact, const char *glob);
+static void ShowFormat(int interact, const char *glob);
 
 static unsigned long long unhex(const char *__restrict cp);
 
 static void status2proc(char *S, proc_t *__restrict P, int is_proc);
 
-void task_show(proc_t *task);
+void TaskShow(proc_t *task);
 
 static void std_err (const char *str)
 {
    static char buf[SMLBUFSIZ];
 
    fflush(stdout);
-   /* we'll use our own buffer so callers can still use fmtmk() and, yes the
+   /* we'll use our own buffer so callers can still use FormatMake() and, yes the
       leading tab is not the standard convention, but the standard is wrong
       -- OUR msg won't get lost in screen clutter, like so many others! */
    snprintf(buf, sizeof(buf), "\t%s: %s\n", "toptest", str);
@@ -421,7 +421,7 @@ static void std_err (const char *str)
    bye_bye(stderr, 1, buf);
 }
 
-static const char *fmtmk (const char *fmts, ...)
+static const char *FormatMake (const char *fmts, ...)
 {
    static char buf[2048];          // with help stuff, our buffer
    va_list va;                          // requirements exceed 1k
@@ -1037,7 +1037,7 @@ static int simple_nextpid(PROCTAB *__restrict const PT, proc_t *__restrict const
 }
 
 
-PROCTAB *openproc(int flags){	//可变参数那部分删除
+PROCTAB *openproc(int flags){
 	PROCTAB *PT = (PROCTAB *)malloc(sizeof(PROCTAB));
 
 	PT->taskdir = NULL;
@@ -1046,7 +1046,7 @@ PROCTAB *openproc(int flags){	//可变参数那部分删除
 	PT->taskreader = simple_readtask;
 
 	PT->reader = simple_readproc;
-	if (flags & 0x1000){
+	if (flags & PROC_PID){
       PT->procfs = NULL;
       PT->finder = listed_nextpid;
     }else{
@@ -1064,16 +1064,12 @@ proc_t* readproc(PROCTAB *__restrict const PT, proc_t *__restrict p) {
   proc_t *saved_p;
 
   PT->did_fake=0;
-//  if (PT->taskdir) {
-//    closedir(PT->taskdir);
-//    PT->taskdir = NULL;
-//    PT->taskdir_user = -1;
-//  }
+
 
   saved_p = p;
   if(!p) p = (proc_t *)malloc(sizeof(*p)); /* passed buf or alloced mem */
 
-  for(;;){
+  while(1){
     // fills in the path, plus p->tid and p->tgid
     if (! PT->finder(PT,p) ) goto out;
 
@@ -1093,7 +1089,7 @@ static int sort_HST_t (const HST_t *P, const HST_t *Q)
    return P->pid - Q->pid;
 }
 
-static void prochlp (proc_t *this)
+static void GetProInfo (proc_t *this)
 {
    static HST_t    *hist_sav = NULL;
    static HST_t    *hist_new = NULL;
@@ -1101,32 +1097,6 @@ static void prochlp (proc_t *this)
    static unsigned  maxt_sav;           // prior frame's max tasks
    TIC_t tics;
 
-   if (!this) {
-      static struct timeval oldtimev;
-      struct timeval timev;
-      struct timezone timez;
-      HST_t *hist_tmp;
-      float et;
-
-      gettimeofday(&timev, &timez);
-      et = (timev.tv_sec - oldtimev.tv_sec)
-         + (float)(timev.tv_usec - oldtimev.tv_usec) / 1000000.0;
-      oldtimev.tv_sec = timev.tv_sec;
-      oldtimev.tv_usec = timev.tv_usec;
-
-      // if in Solaris mode, adjust our scaling for all cpus
-      //Frame_tscale = 100.0f / ((float)(Hertz) * (float)et * (Rc.mode_irixps ? 1 : Cpu_tot));
-      maxt_sav = Frame_maxtask;
-      Frame_maxtask = Frame_running = Frame_sleepin = Frame_stopped = Frame_zombied = 0;
-
-      // reuse memory each time around
-      hist_tmp = hist_sav;
-      hist_sav = hist_new;
-      hist_new = hist_tmp;
-      // prep for our binary search by sorting the last frame's HST_t's
-      qsort(hist_sav, maxt_sav, sizeof(HST_t), (QFP_t)sort_HST_t);
-      return;
-   }
    #if DEBUG
    printf("prochlp:%c\n", this->state);
    #endif
@@ -1163,20 +1133,16 @@ static void prochlp (proc_t *this)
    ptr = bsearch(&tmp, hist_sav, maxt_sav, sizeof tmp, sort_HST_t);
    if(ptr) {
    	tics -= ptr->tics;
-	message_show(fmtmk("ptr not null tics=%d", tics));
+	MessageShow(FormatMake("ptr not null tics=%d", tics));
    }
-   // we're just saving elapsed tics, to be converted into %cpu if
-   // this task wins it's displayable screen row lottery... */
+
    this->pcpu = tics;
-// if (Frames_maxcmdln) { }
-   // shout this to the world with the final call (or us the next time in)
+
    Frame_maxtask++;
 }
 
 static void summaryhlp (CPU_t *cpu, const char *pfx)
 {
-   // we'll trim to zero if we get negative time ticks,
-   // which has happened with some SMP kernels (pre-2.4?)
 #define TRIMz(x)  ((tz = (SIC_t)(x)) < 0 ? 0 : tz)
    SIC_t u_frme, s_frme, n_frme, i_frme, w_frme, x_frme, y_frme, z_frme, tot_frme, tz;
    float scale;
@@ -1195,9 +1161,9 @@ static void summaryhlp (CPU_t *cpu, const char *pfx)
 
    // display some kinda' cpu state percentages
    // (who or what is explained by the passed prefix)
-   show_special(
+   ShowFormat(
       0,
-      fmtmk(
+      FormatMake(
          STATES_line2x4,
          pfx,
          (float)u_frme * scale,
@@ -1224,12 +1190,12 @@ static void summaryhlp (CPU_t *cpu, const char *pfx)
 #undef TRIMz
 }
 
-static proc_t **procs_refresh (proc_t **table, int flags){
+static proc_t **ProcsRefresh (proc_t **table, int flags){
 	PROCTAB *PT = PT = openproc(flags);
 	proc_t *ptsk;
 	int idx = 0;
 	row_to_show = 7;
-	task_title_show();
+	TaskTitleShow();
 	row_to_show = 8;
 	
 	if(table == NULL){
@@ -1244,9 +1210,9 @@ static proc_t **procs_refresh (proc_t **table, int flags){
 	
 	while(1){
 		if((ptsk = readproc(PT, NULL)) != NULL){
-			prochlp(ptsk);
+			GetProInfo(ptsk);
 			if(ptsk->tid > 45){
-				task_show(ptsk);
+				TaskShow(ptsk);
 				row_to_show++;
 			}
 			table[idx++] = ptsk;
@@ -1266,7 +1232,7 @@ static proc_t **procs_refresh (proc_t **table, int flags){
 		
 }
 
-static CPU_t *cpus_refresh (CPU_t *cpus)
+static CPU_t *CpusRead (CPU_t *cpus)
 {
    static FILE *fp = NULL;
    int i;
@@ -1278,7 +1244,7 @@ static CPU_t *cpus_refresh (CPU_t *cpus)
       (sorry Linux, but you'll have to close it for us) */
    if (!fp) {
       if (!(fp = fopen("/proc/stat", "r")))
-         std_err(fmtmk("Failed /proc/stat open: %s", strerror(errno)));
+         std_err(FormatMake("Failed /proc/stat open: %s", strerror(errno)));
       /* note: we allocate one more CPU_t than Cpu_tot so that the last slot
                can hold tics representing the /proc/stat cpu summary (the first
                line read) -- that slot supports our View_CPUSUM toggle */
@@ -1331,7 +1297,7 @@ static int compare_mem_table_structs(const void *a, const void *b){
   return strcmp(((const mem_table_struct*)a)->name,((const mem_table_struct*)b)->name);
 }
 
-void meminfo(void){
+void MemRead(void){
   char namebuf[16]; /* big enough to hold any row name */
   mem_table_struct findme = { namebuf, NULL};
   mem_table_struct *found;
@@ -1412,7 +1378,7 @@ nextline:
 }
 
 
-static void show_special(int interact, const char *glob){
+static void ShowFormat(int interact, const char *glob){
 	char *line_end, line[2048];
 	long long cols;
 	while((line_end = strchr(glob, '\n')) != NULL){
@@ -1430,52 +1396,52 @@ static proc_t **summary_show (void){
 	static CPU_t *smpcpu = NULL;
 
 	if(!p_table){
-		p_table = procs_refresh(NULL, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
+		p_table = ProcsRefresh(NULL, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
 	}
 	else{
-		p_table = procs_refresh(p_table, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
+		p_table = ProcsRefresh(p_table, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
 	}
 
-	smpcpu = cpus_refresh(smpcpu);
+	ShowFormat(0, FormatMake(STATES_line1, Frame_maxtask, Frame_running, Frame_sleepin, Frame_stopped, Frame_zombied));
+	row_to_show++;
+	smpcpu = CpusRead(smpcpu);
 	#ifdef STEP
 	getchar();
 	#endif
-	show_special(0, fmtmk(STATES_line1, Frame_maxtask, Frame_running, Frame_sleepin, Frame_stopped, Frame_zombied));
-	row_to_show++;
 	#ifdef STEP
 	getchar();
 	#endif
 	summaryhlp(&smpcpu[Cpu_tot], "Cpu(s):");
 
-	meminfo();
-	show_special(0, fmtmk(MEMORY_line1, kb_main_total, kb_main_used, kb_main_free, kb_main_buffers));
+	MemRead();
+	ShowFormat(0, FormatMake(MEMORY_line1, kb_main_total, kb_main_used, kb_main_free, kb_main_buffers));
 	row_to_show++;
 	#ifdef STEP
 	getchar();
 	#endif
-    show_special(0, fmtmk(MEMORY_line2, kb_swap_total, kb_swap_used, kb_swap_free, kb_main_cached));
+    ShowFormat(0, FormatMake(MEMORY_line2, kb_swap_total, kb_swap_used, kb_swap_free, kb_main_cached));
 	row_to_show++;
 
 	return p_table;
 }	
 
-void task_show(proc_t *task){
+void TaskShow(proc_t *task){
 	if(row_to_show > lines) return;
 	putp(tgoto(cursor_address, 0, row_to_show));
-	//show_special(0, fmtmk(TASK_line, task->tid, task->pcpu, task->size, task->vm_size, task->euser, task->utime, task->vm_exe, task->vm_data + task->vm_stack, task->ppid, task->ruser, task->egroup, task->cmdline));
-	show_special(0, fmtmk(TASK_line, task->tid, task->pcpu, task->size, (float)task->size / kb_main_total, task->vm_size, task->euser, task->utime + task->stime, (unsigned long)task->vm_exe, (unsigned long)(task->vm_data + task->vm_stack), task->ppid, task->ruser, task->egroup, task->cmd));
+	//ShowFormat(0, FormatMake(TASK_line, task->tid, task->pcpu, task->size, task->vm_size, task->euser, task->utime, task->vm_exe, task->vm_data + task->vm_stack, task->ppid, task->ruser, task->egroup, task->cmdline));
+	ShowFormat(0, FormatMake(TASK_line, task->tid, task->pcpu, task->size, (float)task->size / kb_main_total, task->vm_size, task->euser, task->utime + task->stime + task->cstime + task->cutime, (unsigned long)task->vm_exe, (unsigned long)(task->vm_data + task->vm_stack), task->ppid, task->ruser, task->egroup, task->cmd));
 	putp(tgoto(cursor_address, 0, 3));
 }
 
-void task_title_show(proc_t *task){
+void TaskTitleShow(proc_t *task){
 	putp(tgoto(cursor_address, 0, row_to_show));
-	show_special(0, TASK_TITLE);
+	ShowFormat(0, TASK_TITLE);
 	putp(tgoto(cursor_address, 0, 3));
 }
 
-void message_show(char *message){
-	putp(tgoto(cursor_address, 0, 0));
-	show_special(0, message);
+void MessageShow(char *message){
+	putp(tgoto(cursor_address, 0, 1));
+	ShowFormat(0, message);
 	putp(tgoto(cursor_address, 0, row_to_show));
 }
 
