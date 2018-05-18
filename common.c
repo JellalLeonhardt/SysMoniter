@@ -40,7 +40,7 @@ static int vminfo_fd = -1;
 //缓冲、缓冲缓冲区和命令未加入
 //#define TASK_TITLE "PID\tpcpu\tmem\tpmem\t\tswap\teuser\tutime\tesize\tdssize\tppid\truser\tegroup\tcmd"
 //#define TASK_line "%d\t%u\t%ld\t%f\t\t%ld\t%s\t%lld\t%ld\t%ld\t%d\t%s\t%s\t%s"
-#define TASK_TITLE "PID\tpcpu\tmem\tpmem\tswap\teuser\tutime\tesize\tdssize\tppid\truser\tegroup\tcmd"
+#define TASK_TITLE "PID\tpcpu\tmem\tpmem\tswap\teuser\ttime\tesize\tdssize\tppid\truser\tegroup\tcmd"
 #define TASK_line "%d\t%u\t%ld\t%.4f\t%ld\t%s\t%lld\t%ld\t%ld\t%d\t%s\t%s\t%s"
 
 #define LOADAV_line  "%s -%s\n"
@@ -1463,7 +1463,7 @@ void task_show(proc_t *task){
 	if(row_to_show > lines) return;
 	putp(tgoto(cursor_address, 0, row_to_show));
 	//show_special(0, fmtmk(TASK_line, task->tid, task->pcpu, task->size, task->vm_size, task->euser, task->utime, task->vm_exe, task->vm_data + task->vm_stack, task->ppid, task->ruser, task->egroup, task->cmdline));
-	show_special(0, fmtmk(TASK_line, task->tid, task->pcpu, task->size, (float)task->size / kb_main_total, task->vm_size, task->euser, task->utime, (unsigned long)task->vm_exe, (unsigned long)(task->vm_data + task->vm_stack), task->ppid, task->ruser, task->egroup, task->cmd));
+	show_special(0, fmtmk(TASK_line, task->tid, task->pcpu, task->size, (float)task->size / kb_main_total, task->vm_size, task->euser, task->utime + task->stime, (unsigned long)task->vm_exe, (unsigned long)(task->vm_data + task->vm_stack), task->ppid, task->ruser, task->egroup, task->cmd));
 	putp(tgoto(cursor_address, 0, 3));
 }
 
