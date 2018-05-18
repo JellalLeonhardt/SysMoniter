@@ -1430,10 +1430,10 @@ static proc_t **summary_show (void){
 	static CPU_t *smpcpu = NULL;
 
 	if(!p_table){
-		p_table = procs_refresh(NULL, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR | PROC_FILLCOM);
+		p_table = procs_refresh(NULL, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
 	}
 	else{
-		p_table = procs_refresh(p_table, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR | PROC_FILLCOM);
+		p_table = procs_refresh(p_table, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
 	}
 
 	smpcpu = cpus_refresh(smpcpu);
@@ -1501,7 +1501,7 @@ void frame(void){
 	row_to_show = 3;
 	//putp(clear_screen);
 	summary_show();
-	putp(clr_eol);
+	//putp(clr_eol);
 	//strcat(str,"AS");
 	//str[0] += 1;
 	//putp(str);
