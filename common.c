@@ -1460,6 +1460,7 @@ static proc_t **summary_show (void){
 }	
 
 void task_show(proc_t *task){
+	if(row_to_show > lines) return;
 	putp(tgoto(cursor_address, 0, row_to_show));
 	//show_special(0, fmtmk(TASK_line, task->tid, task->pcpu, task->size, task->vm_size, task->euser, task->utime, task->vm_exe, task->vm_data + task->vm_stack, task->ppid, task->ruser, task->egroup, task->cmdline));
 	show_special(0, fmtmk(TASK_line, task->tid, task->pcpu, task->size, (float)task->size / kb_main_total, task->vm_size, task->euser, task->utime, (unsigned long)task->vm_exe, (unsigned long)(task->vm_data + task->vm_stack), task->ppid, task->ruser, task->egroup, task->cmdline));
