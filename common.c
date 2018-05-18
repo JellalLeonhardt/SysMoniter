@@ -1158,8 +1158,10 @@ static void prochlp (proc_t *this)
    const HST_t *ptr;
    tmp.pid = this->tid;
    ptr = bsearch(&tmp, hist_sav, maxt_sav, sizeof tmp, sort_HST_t);
-   if(ptr) tics -= ptr->tics;
-
+   if(ptr) {
+   	tics -= ptr->tics;
+	message_show(fmtmk("ptr not null tics=%d", tics))
+   }
    // we're just saving elapsed tics, to be converted into %cpu if
    // this task wins it's displayable screen row lottery... */
    this->pcpu = tics;
@@ -1434,6 +1436,7 @@ static proc_t **summary_show (void){
 	getchar();
 	#endif
 	show_special(0, fmtmk(STATES_line1, Frame_maxtask, Frame_running, Frame_sleepin, Frame_stopped, Frame_zombied));
+	row_to_show++;
 	#ifdef STEP
 	getchar();
 	#endif
@@ -1441,10 +1444,12 @@ static proc_t **summary_show (void){
 
 	meminfo();
 	show_special(0, fmtmk(MEMORY_line1, kb_main_total, kb_main_used, kb_main_free, kb_main_buffers));
+	row_to_show++;
 	#ifdef STEP
 	getchar();
 	#endif
     show_special(0, fmtmk(MEMORY_line2, kb_swap_total, kb_swap_used, kb_swap_free, kb_main_cached));
+	row_to_show++;
 
 	return p_table;
 }	
@@ -1459,6 +1464,12 @@ void task_title_show(proc_t *task){
 	putp(tgoto(cursor_address, 0, row_to_show));
 	show_special(0, TASK_TITLE);
 	putp(tgoto(cursor_address, 0, 3));
+}
+
+void message_show(char *message){
+	putp(tgoto(cursor_address, 0, 0));
+	show_special(0, message);
+	putp(tgoto(cursor_address, 0, row_to_show));
 }
 
 void init(void){
@@ -1479,6 +1490,7 @@ void taskInfo(void){
 
 void frame(void){
 	putp(tgoto(cursor_address, 0, 3));
+	row_to_show = 3;
 	//putp(clear_screen);
 	summary_show();
 	putp(clr_eol);
