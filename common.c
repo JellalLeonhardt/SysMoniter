@@ -40,8 +40,8 @@ static int vminfo_fd = -1;
 //缓冲、缓冲缓冲区和命令未加入
 //#define TASK_TITLE "PID\tpcpu\tmem\tpmem\t\tswap\teuser\tutime\tesize\tdssize\tppid\truser\tegroup\tcmd"
 //#define TASK_line "%d\t%u\t%ld\t%f\t\t%ld\t%s\t%lld\t%ld\t%ld\t%d\t%s\t%s\t%s"
-#define TASK_TITLE "PID\tpcpu\tmem\tpmem\tswap\teuser\tutime\tesize\tdssize\tppid\truser\tegroup\tcmd"
-#define TASK_line "%d\t%u\t%ld\t%.4f\t%ld\t%s\t%lld\t%ld\t%ld\t%d\t%s\t%s\t%s"
+#define TASK_TITLE "PID\tpcpu\tmem\tpmem\tswap\teuser\tutime\tesize\tdssize\tppid\truser\tegroup"
+#define TASK_line "%d\t%u\t%ld\t%.4f\t%ld\t%s\t%lld\t%ld\t%ld\t%d\t%s\t%s"
 
 #define LOADAV_line  "%s -%s\n"
 #define LOADAV_line_alt  "%s\06 -%s\n"
