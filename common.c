@@ -1427,7 +1427,7 @@ static proc_t **summary_show (void){
 	static CPU_t *smpcpu = NULL;
 
 	if(!p_table){
-PROC_FILLUSR		p_table = procs_refresh(NULL, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
+		p_table = procs_refresh(NULL, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
 	}
 	else{
 		p_table = procs_refresh(p_table, PROC_FILLSTATUS);
