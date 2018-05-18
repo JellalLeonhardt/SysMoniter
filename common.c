@@ -1430,7 +1430,7 @@ static proc_t **summary_show (void){
 		p_table = procs_refresh(NULL, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
 	}
 	else{
-		p_table = procs_refresh(p_table, PROC_FILLSTATUS);
+		p_table = procs_refresh(p_table, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
 	}
 
 	smpcpu = cpus_refresh(smpcpu);
