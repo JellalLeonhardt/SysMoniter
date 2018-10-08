@@ -13,6 +13,7 @@
 #define PROC_FILLSTAT        0x0040 // read stat -- currently unconditional
 #define PROC_FILLWCHAN       0x0080 // look up WCHAN name
 #define PROC_FILLARG         0x0100 // alloc and fill in `cmdline'
+#define PROC_FILLIO			 0x0200 // IO read
 
 #define PROC_LOOSE_TASKS     0x0200 // threat threads as if they were processes
 
@@ -40,31 +41,45 @@ static int vminfo_fd = -1;
 //缓冲、缓冲缓冲区和命令未加入
 //#define TASK_TITLE "PID\tpcpu\tmem\tpmem\t\tswap\teuser\tutime\tesize\tdssize\tppid\truser\tegroup\tcmd"
 //#define TASK_line "%d\t%u\t%ld\t%f\t\t%ld\t%s\t%lld\t%ld\t%ld\t%d\t%s\t%s\t%s"
-#define TASK_TITLE "PID\tpcpu\tmem\tpmem\tswap\teuser\ttime\tesize\tdssize\tppid\truser\tegroup\tcmd"
-#define TASK_line "%d\t%u\t%ld\t%.4f\t%ld\t%s\t%lld\t%ld\t%ld\t%d\t%s\t%s\t%s"
+#define TASK_TITLE "PID\tcpu\t\tmem\tpmem\tswap\teuser\tesize\tdssize\tppid\truser\tread\twrite\tcmd"
+#define TASK_line0 "%d\t%.2fs\t\t%ldKB\t%.4f\t%ldKB\t%s\t%ld\t%ld\t%d\t%s\t%s\t%s\t%s"
+#define TASK_line1 "%d\t%.2fm\t\t%ldKB\t%.4f\t%ldKB\t%s\t%ld\t%ld\t%d\t%s\t%s\t%s\t%s"
+#define SHOW_TASK0 ShowFormat(0, FormatMake(TASK_line0, task->tid, (float)task->pcpu / 100, task->vm_rss, (float)task->vm_rss / kb_main_total * 100, task->vm_size - task->vm_rss, task->euser, (unsigned long)task->vm_exe, (unsigned long)(task->vm_data + task->vm_stack), task->ppid, task->ruser, task->rchar, task->wchar, task->cmd)); \
+char *_p = _buf; \
+write(txt_fd, _p, strlen(_p)); \
+	write(txt_fd, "\n", 1);
+
+#define SHOW_TASK1 ShowFormat(0, FormatMake(TASK_line1, task->tid, (float)task->pcpu / 100 / 60, task->vm_rss, (float)task->vm_rss / kb_main_total * 100, task->vm_size - task->vm_rss, task->euser, (unsigned long)task->vm_exe, (unsigned long)(task->vm_data + task->vm_stack), task->ppid, task->ruser, task->rchar, task->wchar, task->cmd)); \
+char *_p = _buf; \
+write(txt_fd, _p, strlen(_p)); \
+	write(txt_fd, "\n", 1);
+
+
+#define NET_TITLE "\tReceive\tTransmit"
+#define NET_line "lo:\t%s\t%s\neth0:\t%s\t%s"
 
 #define LOADAV_line  "%s -%s\n"
-#define LOADAV_line_alt  "%s\06 -%s\n"
-#define STATES_line1  "Tasks:\03" \
-   " %3u \02total,\03 %3u \02running,\03 %3u \02sleeping,\03 %3u \02stopped,\03 %3u \02zombie\03\n"
-#define STATES_line2x4  "%s\03" \
-   " %#5.1f%% \02user,\03 %#5.1f%% \02system,\03 %#5.1f%% \02nice,\03 %#5.1f%% \02idle\03\n"
-#define STATES_line2x5  "%s\03" \
-   " %#5.1f%% \02user,\03 %#5.1f%% \02system,\03 %#5.1f%% \02nice,\03 %#5.1f%% \02idle,\03 %#5.1f%% \02IO-wait\03\n"
-#define STATES_line2x6  "%s\03" \
-   " %#4.1f%% \02us,\03 %#4.1f%% \02sy,\03 %#4.1f%% \02ni,\03 %#4.1f%% \02id,\03 %#4.1f%% \02wa,\03 %#4.1f%% \02hi,\03 %#4.1f%% \02si\03\n"
-#define STATES_line2x7  "%s\03" \
-   "%#5.1f%%\02us,\03%#5.1f%%\02sy,\03%#5.1f%%\02ni,\03%#5.1f%%\02id,\03%#5.1f%%\02wa,\03%#5.1f%%\02hi,\03%#5.1f%%\02si,\03%#5.1f%%\02st\03\n"
+#define LOADAV_line_alt  "%s\t -%s\n"
+#define STATES_line1  "Tasks:\t" \
+   " %3u \ttotal,\t %3u \trunning,\t %3u \tsleeping,\t %3u \tstopped,\t %3u \tzombie\t\n"
+#define STATES_line2x4  "%s\t" \
+   " %#5.1f%% \tuser,\t %#5.1f%% \tsystem,\t %#5.1f%% \tnice,\t %#5.1f%% \tidle\t\n"
+#define STATES_line2x5  "%s\t" \
+   " %#5.1f%% \tuser,\t %#5.1f%% \tsystem,\t %#5.1f%% \tnice,\t %#5.1f%% \tidle,\t %#5.1f%% \tIO-wait\t\n"
+#define STATES_line2x6  "%s\t" \
+   " %#4.1f%% \tus,\t %#4.1f%% \tsy,\t %#4.1f%% \tni,\t %#4.1f%% \tid,\t %#4.1f%% \twa,\t %#4.1f%% \thi,\t %#4.1f%% \tsi\t\n"
+#define STATES_line2x7  "%s\t" \
+   "%#5.1f%%\tus,\t%#5.1f%%\tsy,\t%#5.1f%%\tni,\t%#5.1f%%\tid,\t%#5.1f%%\twa,\t%#5.1f%%\thi,\t%#5.1f%%\tsi,\t%#5.1f%%\tst\t\n"
 #ifdef CASEUP_SUMMK
-#define MEMORY_line1  "Mem: \03" \
-   " %8luK \02total,\03 %8luK \02used,\03 %8luK \02free,\03 %8luK \02buffers\03\n"
-#define MEMORY_line2  "Swap:\03" \
-   " %8luK \02total,\03 %8luK \02used,\03 %8luK \02free,\03 %8luK \02cached\03\n"
+#define MEMORY_line1  "Mem: \t" \
+   " %8luK \ttotal,\t %8luK \tused,\t %8luK \tfree,\t %8luK \tbuffers\t\n"
+#define MEMORY_line2  "Swap:\t" \
+   " %8luK \ttotal,\t %8luK \tused,\t %8luK \tfree,\t %8luK \tcached\t\n"
 #else
-#define MEMORY_line1  "Mem: \03" \
-   " %8luk \02total,\03 %8luk \02used,\03 %8luk \02free,\03 %8luk \02buffers\03\n"
-#define MEMORY_line2  "Swap:\03" \
-   " %8luk \02total,\03 %8luk \02used,\03 %8luk \02free,\03 %8luk \02cached\03\n"
+#define MEMORY_line1  "Mem: \t" \
+   " %8luk \ttotal,\t %8luk \tused,\t %8luk \tfree,\t %8luk \tbuffers\t\n"
+#define MEMORY_line2  "Swap:\t" \
+   " %8luk \ttotal,\t %8luk \tused,\t %8luk \tfree,\t %8luk \tcached\t\n"
 #endif
 
 #define BAD_OPEN_MESSAGE					\
@@ -140,6 +155,12 @@ typedef unsigned long long TIC_t;
 typedef          long long SIC_t;
 typedef long long KLONG;
 typedef int (*QFP_t)(const void *, const void *);
+
+typedef struct net_t {
+	long long lo_bytes_receive, lo_bytes_transmit, eth0_bytes_receive, eth0_bytes_transmit;
+	long long lo_packets_receive, lo_packets_transmit, eth0_packets_receive, eth0_packets_transmit;
+	char lo_bytes_receive_s[20], lo_bytes_transmit_s[20], eth0_bytes_receive_s[20], eth0_bytes_transmit_s[20];
+} net_t;
 
 typedef struct proc_t {
 // 1st 16 bytes
@@ -245,6 +266,14 @@ typedef struct proc_t {
 	tpgid,		// stat            terminal process group id
 	exit_signal,	// stat            might not be SIGCHLD
 	processor;      // stat            current (or most recent?) CPU
+	//Linux process I/O
+	char	  rchar[10],	//rchar
+	          wchar[10],	//wchar
+			  syscr[10],	//syscr
+			  syscw[10],	//syscw
+			  read_bytes[10],	//read_bytes
+			  write_bytes[10],	//write_bytes
+			  cancelled_write_bytes[10];	//cancelled_write_bytes
 } proc_t;
 
 typedef struct PROCTAB {
@@ -325,6 +354,26 @@ typedef struct status_table_struct {
 #endif
 } status_table_struct;
 
+typedef struct user_t{
+	char name[21];
+	char cpu[30];
+	long long cput;
+	char mem[30];
+	long long memt;
+	struct user_t *next;
+}user_t, *user_p;
+
+typedef struct process_t{
+	char cmd[21];
+	unsigned cput;//jiffies
+	unsigned long memt;//kb
+	unsigned long swap;//kb
+	char rchar[10], wchar[10];
+	struct process_t *next;
+	unsigned long seconds;
+	unsigned char alive;
+}process_t, *process_p;
+
 static int       Frames_libflags;       // PROC_FILLxxx flags (0 = need new)
 static unsigned  Frame_maxtask;         // last known number of active tasks
                                         // ie. current 'size' of proc table
@@ -392,6 +441,20 @@ static char buf[2048];
 
 static int row_to_show = 7;
 
+net_t NET;
+	
+int txt_fd;
+int proc_fd; //结束进程记录文件的文件描述符
+   
+char _buf[2048];          // with help stuff, our buffer
+char line_buf[2048];	//use to read one line from file
+
+user_t user_head;
+user_p user_tail;
+
+process_t process_head;
+process_p process_tail;
+
 static unsigned long long Hertz;
 extern void __cyg_profile_func_enter(void*, void*);
 extern void	__cyg_profile_func_exit(void *, void *);
@@ -403,6 +466,70 @@ static unsigned long long unhex(const char *__restrict cp);
 static void status2proc(char *S, proc_t *__restrict P, int is_proc);
 
 void TaskShow(proc_t *task);
+
+user_p insert(user_p head, user_p node)	//赋值给tail
+{
+	if (head->next == NULL) {
+		head->next = node;
+		user_tail = node;
+		node->next = NULL;
+		return node;
+	}
+	user_tail->next = node;
+	node->next = NULL;
+	return node;
+}
+
+user_p check(user_p head, char name[21]) {
+	while (head->next != NULL){
+		if(strcmp(head->next->name, name) == 0){
+				return head->next;
+		}
+		head = head->next;
+	}
+	return NULL;
+}
+
+user_p new_user(){
+	user_p temp = (user_p)malloc(sizeof(user_t));
+	temp->cput = 0;
+	temp->memt = 0;
+	return temp;
+}
+
+process_p insertProcess(process_p head, process_p node)	//赋值给tail
+{
+	if (head->next == NULL) {
+		head->next = node;
+		process_tail = node;
+		node->next = NULL;
+		return node;
+	}
+	process_tail->next = node;
+	node->next = NULL;
+	return node;
+}
+
+process_p checkProcess(process_p head, char name[21]) {
+	while (head->next != NULL){
+		if(strcmp(head->next->cmd, name) == 0){
+				return head->next;
+		}
+		head = head->next;
+	}
+	return NULL;
+}
+
+process_p newProcess(){
+	process_p temp = (process_p)malloc(sizeof(process_t));
+	temp->cput = 0;
+	temp->memt = 0;
+	temp->swap = 0;
+	temp->alive = 0;
+	temp->seconds = 0;
+	temp->next = NULL;
+	return temp;
+}
 
 static void std_err (const char *str)
 {
@@ -423,13 +550,12 @@ static void std_err (const char *str)
 
 static const char *FormatMake (const char *fmts, ...)
 {
-   static char buf[2048];          // with help stuff, our buffer
-   va_list va;                          // requirements exceed 1k
+   va_list va;
 
    va_start(va, fmts);
-   vsnprintf(buf, sizeof(buf), fmts, va);
+   vsnprintf(_buf, sizeof(buf), fmts, va);
    va_end(va);
-   return (const char *)buf;
+   return (const char *)_buf;
 }
 
 static int simple_nexttid(PROCTAB *__restrict const PT, const proc_t *__restrict const p, proc_t *__restrict const t, char *__restrict const path) {
@@ -883,6 +1009,49 @@ ENTER(0x220);
 LEAVE(0x220);
 }
 
+void io2proc(char *S, proc_t *__restrict P)
+{
+	char name[21];
+	long long temp;
+	sscanf(S,"rchar: %lld\n", &temp);
+	while(*S++ != '\n');
+	if(temp > 1073741824){
+		sprintf(P->rchar, "%dGB", temp / 1024 / 1024 / 1024);
+	}
+	else if(temp > 1048576){
+		sprintf(P->rchar, "%dMB", temp / 1024 / 1024);
+	}
+	else if(temp > 104){
+		sprintf(P->rchar, "%dKB", temp / 1024);
+	}
+	else{
+		sprintf(P->rchar, "%dB", temp);
+	}
+	sscanf(S,"wchar: %lld\n", &temp);
+	while(*S++ != '\n');
+	if(temp > 1073741824){
+		sprintf(P->rchar, "%dGB", temp / 1024 / 1024 / 1024);
+	}
+	else if(temp > 1048576){
+		sprintf(P->wchar, "%dMB", temp / 1024 / 1024);
+	}
+	else if(temp > 104){
+		sprintf(P->wchar, "%dKB", temp / 1024);
+	}
+	else{
+		sprintf(P->wchar, "%dB", temp);
+	}
+	sscanf(S,"%s%d\n", name, &temp);
+	while(*S++ != '\n');
+	sscanf(S,"%s%d\n", name, &temp);
+	while(*S++ != '\n');
+	sscanf(S,"%s%d\n", name, &temp);
+	while(*S++ != '\n');
+	sscanf(S,"%s%d\n", name, &temp);
+	while(*S++ != '\n');
+	sscanf(S,"%s%d\n", name, &temp);
+}
+
 static char** file2strvec(const char* directory, const char* what) {
     char buf[2048];	/* read buf bytes at a time */
     char *p, *rbuf = 0, *endbuf, **q, **ret;
@@ -969,7 +1138,12 @@ static proc_t* simple_readproc(PROCTAB *__restrict const PT, proc_t *__restrict 
 		    status2proc(sbuf, p, 1);
 	    }
 	}
-
+	
+	if(flags & PROC_FILLIO) {
+		if (file2str(path, "io", sbuf,sizeof sbuf) != -1){
+			io2proc(sbuf, p);
+		}
+	}
 	// if multithreaded, some values are crap
     if(p->nlwp > 1){
       p->wchan = (long long)~0ull;
@@ -1176,7 +1350,11 @@ static void summaryhlp (CPU_t *cpu, const char *pfx)
          (float)z_frme * scale
       )
    );
-
+	char *_p = _buf;
+	write(txt_fd, _p, strlen(_p));
+#ifdef TEST
+   getchar();
+#endif
    // remember for next time around
    cpu->u_sav = cpu->u;
    cpu->s_sav = cpu->s;
@@ -1194,9 +1372,12 @@ static proc_t **ProcsRefresh (proc_t **table, int flags){
 	PROCTAB *PT = PT = openproc(flags);
 	proc_t *ptsk;
 	int idx = 0;
+	static int Switch = 0;
+	Switch++;
 	row_to_show = 7;
 	TaskTitleShow();
 	row_to_show = 8;
+	putp(tgoto(cursor_address, 0, row_to_show));
 	
 	if(table == NULL){
 		proc_table_size = 10;
@@ -1211,7 +1392,47 @@ static proc_t **ProcsRefresh (proc_t **table, int flags){
 	while(1){
 		if((ptsk = readproc(PT, NULL)) != NULL){
 			GetProInfo(ptsk);
-			if(ptsk->tid > 45){
+			user_p user = check(&user_head, ptsk->euser);
+			process_p process = checkProcess(&process_head, ptsk->cmd);
+			if(user == NULL){
+				user = new_user();
+				strcpy(user->name, ptsk->euser);
+				user->cput = ptsk->pcpu;
+				user->memt = ptsk->size;
+				sprintf(user->cpu, "%llds", user->cput / 100);
+				sprintf(user->mem, "%lldB", user->memt);
+				user_tail = insert(&user_head,  user);
+			}
+			else{
+				user->cput += ptsk->pcpu;
+				user->memt += ptsk->size;
+				sprintf(user->cpu, "%llds", user->cput / 100);
+				sprintf(user->mem, "%lldB", user->memt);
+			}
+			if(process == NULL){
+				process = newProcess();
+				strcpy(process->cmd, ptsk->cmd);
+				process->cput = ptsk->pcpu;
+				process->memt = ptsk->vm_rss;
+				process->swap = ptsk->vm_size - ptsk->vm_rss;
+				strcpy(process->rchar, ptsk->rchar);
+				strcpy(process->wchar, ptsk->wchar);
+				process_tail = insertProcess(&process_head, process);
+			}
+			else{
+				process->cput = ptsk->pcpu;
+				process->memt += ptsk->vm_rss;
+				process->swap += ptsk->vm_size - ptsk->vm_rss;
+				strcpy(process->rchar, ptsk->rchar);
+				strcpy(process->wchar, ptsk->wchar);
+			}
+			process->alive = 1;
+			process->seconds++;
+			if((Switch / 3 ) % 2 == 1){
+				TaskShow(ptsk);
+				row_to_show++;
+			}
+			else if(ptsk->tid > 3000){
 				TaskShow(ptsk);
 				row_to_show++;
 			}
@@ -1228,6 +1449,7 @@ static proc_t **ProcsRefresh (proc_t **table, int flags){
 	#if DEBUG
 	printf("procs_refresh\n");
 	#endif
+	putp(tgoto(cursor_address, 0, 3));
 	return table;
 		
 }
@@ -1391,18 +1613,116 @@ static void ShowFormat(int interact, const char *glob){
 	if (*glob) PUTT("%s", glob);
 }
 
+void NetRead(void)
+{
+	char buf[2048];
+	char *p = buf;
+	static long long GB = 1024 * 1024 * 1024;
+	static long long MB = 1024 * 1024;
+	static long long KB = 1024;
+	file2str("/proc/1/net", "dev", buf, sizeof buf);
+	while(*(p++) != ':');
+	sscanf(p, "%lld%*lld%*lld%*lld%*lld%*lld%*lld%*lld%lld", &NET.lo_bytes_receive, &NET.lo_bytes_transmit);
+	if(NET.lo_bytes_receive > GB){
+		sprintf(NET.lo_bytes_receive_s, "%lldGB", NET.lo_bytes_receive / GB);
+	}
+	else if(NET.lo_bytes_receive > MB){
+		sprintf(NET.lo_bytes_receive_s, "%lldMB", NET.lo_bytes_receive / MB);
+	}
+	else if(NET.lo_bytes_receive > KB){
+		sprintf(NET.lo_bytes_receive_s, "%lldKB", NET.lo_bytes_receive / KB);
+	}
+	else{
+		sprintf(NET.lo_bytes_receive_s, "%lldB", NET.lo_bytes_receive);
+	}
+	if(NET.lo_bytes_transmit > GB){
+		sprintf(NET.lo_bytes_transmit_s, "%lldGB", NET.lo_bytes_transmit / GB);
+	}
+	else if(NET.lo_bytes_transmit > MB){
+		sprintf(NET.lo_bytes_transmit_s, "%lldMB", NET.lo_bytes_transmit / MB);
+	}
+	else if(NET.lo_bytes_transmit > KB){
+		sprintf(NET.lo_bytes_transmit_s, "%lldkB", NET.lo_bytes_transmit / KB);
+	}
+	else{
+		sprintf(NET.lo_bytes_transmit_s, "%lldB", NET.lo_bytes_transmit);
+	}
+	while(*p++ != ':');
+	sscanf(p, "%lld%*lld%*lld%*lld%*lld%*lld%*lld%*lld%lld", &NET.eth0_bytes_receive, &NET.eth0_bytes_transmit);
+	if(NET.eth0_bytes_receive > GB){
+		sprintf(NET.eth0_bytes_receive_s, "%lldGB", NET.eth0_bytes_receive / GB);
+	}
+	else if(NET.eth0_bytes_receive > MB){
+		sprintf(NET.eth0_bytes_receive_s, "%lldMB", NET.eth0_bytes_receive / MB);
+	}
+	else if(NET.eth0_bytes_receive > KB){
+		sprintf(NET.eth0_bytes_receive_s, "%lldKB", NET.eth0_bytes_receive / KB);
+	}
+	else{
+		sprintf(NET.eth0_bytes_receive_s, "%lldB", NET.eth0_bytes_receive);
+	}
+	if(NET.eth0_bytes_transmit > GB){
+		sprintf(NET.eth0_bytes_transmit_s, "%lldGB", NET.eth0_bytes_transmit / GB);
+	}
+	else if(NET.eth0_bytes_transmit > MB){
+		sprintf(NET.eth0_bytes_transmit_s, "%lldMB", NET.eth0_bytes_transmit / MB);
+	}
+	else if(NET.eth0_bytes_transmit > KB){
+		sprintf(NET.eth0_bytes_transmit_s, "%lldKB", NET.eth0_bytes_transmit / KB);
+	}
+	else{
+		sprintf(NET.eth0_bytes_transmit_s, "%lldB", NET.eth0_bytes_transmit);
+	}
+}
+
+void NetTitleShow(void)
+{
+	putp(tgoto(cursor_address, 0, 0));
+	putp(clr_eol);
+	printf(NET_TITLE);
+	write(txt_fd, "\n", 1);
+	write(txt_fd, NET_TITLE, strlen(NET_TITLE));
+	write(txt_fd, "\n", 1);
+#ifdef TEST
+   getchar();
+#endif
+	putp(tgoto(cursor_address, 0, row_to_show));
+}
+
+void NetShow()
+{
+	char temp[200];
+	putp(tgoto(cursor_address, 0, 1));
+	putp(clr_eol);
+	sprintf(temp, NET_line, NET.lo_bytes_receive_s, NET.lo_bytes_transmit_s, NET.eth0_bytes_receive_s, NET.eth0_bytes_transmit_s);
+	printf(temp);
+	write(txt_fd, temp, strlen(temp));
+#ifdef TEST
+   getchar();
+#endif
+	putp(tgoto(cursor_address, 0, row_to_show));
+}
+
 static proc_t **summary_show (void){
 	static proc_t **p_table = NULL;
 	static CPU_t *smpcpu = NULL;
 
 	if(!p_table){
-		p_table = ProcsRefresh(NULL, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
+		p_table = ProcsRefresh(NULL, PROC_FILLIO | PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
 	}
 	else{
-		p_table = ProcsRefresh(p_table, PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
+		p_table = ProcsRefresh(p_table, PROC_FILLIO | PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
 	}
-
+	#ifdef STEP
+	getchar();
+	#endif
+	write(txt_fd, "\n", 1);
 	ShowFormat(0, FormatMake(STATES_line1, Frame_maxtask, Frame_running, Frame_sleepin, Frame_stopped, Frame_zombied));
+	char *_p = _buf; 
+	write(txt_fd, _p, strlen(_p));
+#ifdef TEST
+   getchar();
+#endif
 	row_to_show++;
 	smpcpu = CpusRead(smpcpu);
 	#ifdef STEP
@@ -1415,13 +1735,56 @@ static proc_t **summary_show (void){
 
 	MemRead();
 	ShowFormat(0, FormatMake(MEMORY_line1, kb_main_total, kb_main_used, kb_main_free, kb_main_buffers));
+	_p = _buf;
+	write(txt_fd, _p, strlen(_p));
+#ifdef TEST
+   getchar();
+#endif
 	row_to_show++;
 	#ifdef STEP
 	getchar();
 	#endif
     ShowFormat(0, FormatMake(MEMORY_line2, kb_swap_total, kb_swap_used, kb_swap_free, kb_main_cached));
+	_p = _buf;
+	write(txt_fd, _p, strlen(_p));
+#ifdef TEST
+   getchar();
+#endif
 	row_to_show++;
-
+	NetRead();
+	NetTitleShow();
+	NetShow();
+	write(txt_fd, "\n\n\n\tuser information\n", strlen("\n\n\n\tuser information\n"));
+	write(txt_fd, "\n\tcpu\tmem\n", strlen("\n\tcpu\tmem\n"));
+	user_p temp = &user_head;
+	while(temp->next != NULL){
+		write(txt_fd, temp->next->name, strlen(temp->next->name));
+		write(txt_fd, "\t", 1);
+		write(txt_fd, temp->next->cpu, strlen(temp->next->cpu));
+		write(txt_fd, "\t", 1);
+		write(txt_fd, temp->next->mem, strlen(temp->next->mem));
+		write(txt_fd, "\n", 1);
+		temp = temp->next;
+	}
+	process_p process = &process_head;
+	process_p to_free;
+	char process_buf[200];
+	while(process->next != NULL){
+		if(process->next->alive == 1){
+			process->next->alive = 0;
+		}
+		else{
+			sprintf(process_buf, "cmd:%s\tcpu:%ujiffies\tmem(average):%ldKB\tswap(average):%ldKB\tread:%s\twrite:%s\n", process->next->cmd, process->next->cput, process->next->memt / process->next->seconds, process->next->swap / process->next->seconds, process->next->rchar, process->next->wchar);
+			write(proc_fd, process_buf, strlen(process_buf));
+			to_free = process->next;
+			process->next = process->next->next;
+			free(to_free);	
+		}
+		process = process->next;
+		if(NULL == process){
+			break;
+		}
+	}
 	return p_table;
 }	
 
@@ -1429,20 +1792,42 @@ void TaskShow(proc_t *task){
 	if(row_to_show > lines) return;
 	putp(tgoto(cursor_address, 0, row_to_show));
 	//ShowFormat(0, FormatMake(TASK_line, task->tid, task->pcpu, task->size, task->vm_size, task->euser, task->utime, task->vm_exe, task->vm_data + task->vm_stack, task->ppid, task->ruser, task->egroup, task->cmdline));
-	ShowFormat(0, FormatMake(TASK_line, task->tid, task->pcpu, task->size, (float)task->size / kb_main_total, task->vm_size, task->euser, task->utime + task->stime + task->cstime + task->cutime, (unsigned long)task->vm_exe, (unsigned long)(task->vm_data + task->vm_stack), task->ppid, task->ruser, task->egroup, task->cmd));
-	putp(tgoto(cursor_address, 0, 3));
+	if(task->pcpu / 100 > 1000){
+		putp(clr_eol);
+		SHOW_TASK1
+	}
+	else{
+		putp(clr_eol);
+		SHOW_TASK0
+	}
 }
 
-void TaskTitleShow(proc_t *task){
+void TaskTitleShow(){
 	putp(tgoto(cursor_address, 0, row_to_show));
 	ShowFormat(0, TASK_TITLE);
-	putp(tgoto(cursor_address, 0, 3));
+	write(txt_fd, TASK_TITLE, strlen(TASK_TITLE));
+	write(txt_fd, "\n", 1);
+#ifdef TEST
+   getchar();
+#endif
 }
 
 void MessageShow(char *message){
 	putp(tgoto(cursor_address, 0, 1));
+	putp(clr_eol);
 	ShowFormat(0, message);
 	putp(tgoto(cursor_address, 0, row_to_show));
+}
+
+int readLine(int fd){
+	int i = 0;
+	do{
+		if(read(fd, line_buf[i], 1) == 0){
+			line_buf[i] = 0;
+			return 0;	//后面没了
+		}
+	}while(line_buf[i++] != '\n');
+	return 1;	//后面还有
 }
 
 void init(void){
@@ -1453,16 +1838,36 @@ void init(void){
 	Cpu_tot = sysconf(_SC_NPROCESSORS_ONLN);
 	MessageShow("Message:init complete");
 	getchar();
+	txt_fd = open("/usr/local/nginx/html/test/test.txt", O_WRONLY, 0);
+	proc_fd = open("/usr/local/nginx/html/test/proc.txt", O_WRONLY, 0);
+	if(txt_fd == -1) return -1;
+	if(proc_fd == -1) return -1;
+	user_head.next = NULL;
+	user_tail = &user_head;
+	process_head.next = NULL;
+	process_tail = &process_head;
 }
 
 void frame(void){
+	ftruncate(txt_fd, 0);
+	lseek(txt_fd, 0, SEEK_SET);
+	lseek(proc_fd, 0, SEEK_END);
 	putp(tgoto(cursor_address, 0, 3));
+	char a = '\0';
+	printf("%s\n",&a);
 	row_to_show = 3;
-	//putp(clear_screen);
+	user_p temp = &user_head;
+	user_p pre;
+	while(temp->next != NULL){
+		pre = temp->next;
+		free(pre);
+		temp = temp->next;
+	}
+	user_head.next = NULL;
 	summary_show();
 	//putp(clr_eol);
 	//strcat(str,"AS");
 	//str[0] += 1;
 	//putp(str);
-	putp(clr_eos);
+	//putp(clr_eos);
 }
