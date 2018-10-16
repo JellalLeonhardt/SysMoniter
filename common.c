@@ -1832,7 +1832,7 @@ int readLine(int fd){
 
 void init(void){
 	setupterm(NULL, STDOUT_FILENO, NULL);
-	putp(clear_screen);
+	putp(clear_screen); // 这些变量的信息可在 term.h 和 man terminfo 中查到
 	putp(cursor_invisible);
 	putp("This is for test\ncol1\ncol2\n");
 	Cpu_tot = sysconf(_SC_NPROCESSORS_ONLN);
