@@ -6,7 +6,7 @@ static int get_char(int timeout)
 	struct timeval tv;
 	int ch = 0;
 	FD_ZERO(&rfds);
-	FD_SET(0, &rfds);
+	FD_SET(stdin, &rfds);
 	tv.tv_sec = 0;
 	tv.tv_usec = timeout; //设置等待超时时间
 	if (select(1, &rfds, NULL, NULL, &tv) > 0)
