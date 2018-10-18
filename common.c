@@ -38,6 +38,7 @@ static int meminfo_fd = -1;
 #define VMINFO_FILE "/proc/vmstat"
 static int vminfo_fd = -1;
 
+//各种格式
 //缓冲、缓冲缓冲区和命令未加入
 //#define TASK_TITLE "PID\tpcpu\tmem\tpmem\t\tswap\teuser\tutime\tesize\tdssize\tppid\truser\tegroup\tcmd"
 //#define TASK_line "%d\t%u\t%ld\t%f\t\t%ld\t%s\t%lld\t%ld\t%ld\t%d\t%s\t%s\t%s"
@@ -449,10 +450,10 @@ int proc_fd; //结束进程记录文件的文件描述符
 char _buf[2048];          // with help stuff, our buffer
 char line_buf[2048];	//use to read one line from file
 
-user_t user_head;
+user_t user_head; //用户列表 记录用户的资源使用情况
 user_p user_tail;
 
-process_t process_head;
+process_t process_head; //进程列表 记录存活进程 在生命周期内的资源使用情况
 process_p process_tail;
 
 static unsigned long long Hertz;
@@ -581,7 +582,7 @@ static int simple_nexttid(PROCTAB *__restrict const PT, const proc_t *__restrict
 	return 1;
 }
 
-static int file2str(const char *directory, const char *what, char *ret, int cap){
+static int file2str(const char *directory, const char *what, char *ret, int cap){ //读取directory下what文件 存入ret
 	static char filename[80];
 	int fd, num_read;
 
@@ -654,110 +655,6 @@ static void stat2proc(const char *S, proc_t *__restrict P){
 	__cyg_profile_func_exit((void *)0x160, (void *)0x160);
 }
 
-char *user_from_uid(uid_t uid) {
-    struct pwbuf **p;
-	struct passwd *pw;
-
-	p = &pwhash[(uid) & 63];
-	while (*p) {
-		if ((*p)->uid == uid)
-			return((*p)->name);
-		p = &(*p)->next;
-	}
-	*p = (struct pwbuf *) malloc(sizeof(struct pwbuf));
-	(*p)->uid = uid;
-	pw = getpwuid(uid);
-	if(!pw || strlen(pw->pw_name) >= 20)
-		sprintf((*p)->name, "%u", uid);
-	else
-	    strcpy((*p)->name, pw->pw_name);
-
-	(*p)->next = NULL;
-	return((*p)->name);
-}
-
-char *group_from_gid(gid_t gid) {
-    struct grpbuf **g;
-	struct group *gr;
-
-	g = &grphash[(gid) & 63];
-	while (*g) {
-		if ((*g)->gid == gid)
-			return((*g)->name);
-		g = &(*g)->next;
-	}
-    *g = (struct grpbuf *) malloc(sizeof(struct grpbuf));
-	(*g)->gid = gid;
-	gr = getgrgid(gid);
-	if (!gr || strlen(gr->gr_name) >= 20)
-	    sprintf((*g)->name, "%u", gid);
-	else
-	        strcpy((*g)->name, gr->gr_name);
-	(*g)->next = NULL;
-	return((*g)->name);
-}
-
-static proc_t* simple_readtask(PROCTAB *__restrict const PT, const proc_t *__restrict const P, proc_t *__restrict const t, char *__restrict const path) {
-	    static struct stat sb;		// stat() buffer
-		static char sbuf[1024];	// buffer for stat,statm
-		unsigned flags = PT->flags;
-
-		if(stat(path, &sb) == -1){
-			goto next_task;
-		}
-
-		t->euid = sb.st_uid;
-		t->egid = sb.st_gid;
-
-		if(flags & 0x0040){
-			if(file2str(path, "stat", sbuf, sizeof(sbuf)) == -1){
-				goto next_task;
-			}
-			stat2proc(sbuf, t);
-		}
-
-		if(flags & 0x0001){
-			t->size = P->size;
-			t->resident = P->resident;
-			t->share = P->share;
-			t->trs = P->trs;
-			t->lrs = P->lrs;
-			t->drs = P->drs;
-			t->dt = P->dt;
-		}
-
-		if(flags & 0x0020){
-			if(file2str(path, "status", sbuf, sizeof(sbuf)) != -1){
-					status2proc(sbuf, t, 0);
-			}
-		}
-
-		if(flags & 0x0008){
-			memcpy(t->euser, user_from_uid(t->euid), sizeof(t->euser));
-			if(flags & 0x0020){
-				memcpy(t->rgroup, user_from_uid(t->euid), sizeof(t->euser));
-				memcpy(t->sgroup, user_from_uid(t->suid), sizeof(t->suser));
-				memcpy(t->fgroup, user_from_uid(t->fuid), sizeof(t->fuser));
-			}
-		}
-
-		if(flags & 0x0010){
-			memcpy(t->euser, user_from_uid(t->euid), sizeof(t->euser));
-			if(flags & 0x0020){
-				memcpy(t->rgroup, user_from_uid(t->euid), sizeof(t->euser));
-				memcpy(t->sgroup, user_from_uid(t->suid), sizeof(t->suser));
-				memcpy(t->fgroup, user_from_uid(t->fuid), sizeof(t->fuser));
-			}
-		}
-
-		t->cmdline = P->cmdline;
-		t->environ = P->environ;
-		t->ppid = P->ppid;
-		return t;
-next_task:
-		return NULL;
-}
-
 static void statm2proc(const char* s, proc_t *__restrict P) {
     int num;
     num = sscanf(s, "%ld %ld %ld %ld %ld %ld %ld",
@@ -766,15 +663,6 @@ static void statm2proc(const char* s, proc_t *__restrict P) {
 /*    fprintf(stderr, "statm2proc converted %d fields.\n",num); */
 }
 
-static unsigned long long unhex(const char *__restrict cp){
-    unsigned long long ull = 0;
-    for(;;){
-        char c = *cp++;
-        if(c<0x30) break;
-        ull = (ull<<4) | (c - (c>0x57) ? 0x57 : 0x30) ;
-    }
-    return ull;
-}
 
 static void status2proc(char *S, proc_t *__restrict P, int is_proc){
     long Threads = 0;
@@ -1106,6 +994,119 @@ static char** file2strvec(const char* directory, const char* what) {
     return ret;
 }
 
+char *user_from_uid(uid_t uid) {
+    struct pwbuf **p;
+	struct passwd *pw;
+
+	p = &pwhash[(uid) & 63];
+	while (*p) {
+		if ((*p)->uid == uid)
+			return((*p)->name);
+		p = &(*p)->next;
+	}
+	*p = (struct pwbuf *) malloc(sizeof(struct pwbuf));
+	(*p)->uid = uid;
+	pw = getpwuid(uid);
+	if(!pw || strlen(pw->pw_name) >= 20)
+		sprintf((*p)->name, "%u", uid);
+	else
+	    strcpy((*p)->name, pw->pw_name);
+
+	(*p)->next = NULL;
+	return((*p)->name);
+}
+
+char *group_from_gid(gid_t gid) {
+    struct grpbuf **g;
+	struct group *gr;
+
+	g = &grphash[(gid) & 63];
+	while (*g) {
+		if ((*g)->gid == gid)
+			return((*g)->name);
+		g = &(*g)->next;
+	}
+    *g = (struct grpbuf *) malloc(sizeof(struct grpbuf));
+	(*g)->gid = gid;
+	gr = getgrgid(gid);
+	if (!gr || strlen(gr->gr_name) >= 20)
+	    sprintf((*g)->name, "%u", gid);
+	else
+	        strcpy((*g)->name, gr->gr_name);
+	(*g)->next = NULL;
+	return((*g)->name);
+}
+
+static proc_t* simple_readtask(PROCTAB *__restrict const PT, const proc_t *__restrict const P, proc_t *__restrict const t, char *__restrict const path) {
+	    static struct stat sb;		// stat() buffer
+		static char sbuf[1024];	// buffer for stat,statm
+		unsigned flags = PT->flags;
+
+		if(stat(path, &sb) == -1){
+			goto next_task;
+		}
+
+		t->euid = sb.st_uid;
+		t->egid = sb.st_gid;
+
+		if(flags & 0x0040){
+			if(file2str(path, "stat", sbuf, sizeof(sbuf)) == -1){
+				goto next_task;
+			}
+			stat2proc(sbuf, t);
+		}
+
+		if(flags & 0x0001){
+			t->size = P->size;
+			t->resident = P->resident;
+			t->share = P->share;
+			t->trs = P->trs;
+			t->lrs = P->lrs;
+			t->drs = P->drs;
+			t->dt = P->dt;
+		}
+
+		if(flags & 0x0020){
+			if(file2str(path, "status", sbuf, sizeof(sbuf)) != -1){
+					status2proc(sbuf, t, 0);
+			}
+		}
+
+		if(flags & 0x0008){
+			memcpy(t->euser, user_from_uid(t->euid), sizeof(t->euser));
+			if(flags & 0x0020){
+				memcpy(t->rgroup, user_from_uid(t->euid), sizeof(t->euser));
+				memcpy(t->sgroup, user_from_uid(t->suid), sizeof(t->suser));
+				memcpy(t->fgroup, user_from_uid(t->fuid), sizeof(t->fuser));
+			}
+		}
+
+		if(flags & 0x0010){
+			memcpy(t->euser, user_from_uid(t->euid), sizeof(t->euser));
+			if(flags & 0x0020){
+				memcpy(t->rgroup, user_from_uid(t->euid), sizeof(t->euser));
+				memcpy(t->sgroup, user_from_uid(t->suid), sizeof(t->suser));
+				memcpy(t->fgroup, user_from_uid(t->fuid), sizeof(t->fuser));
+			}
+		}
+
+		t->cmdline = P->cmdline;
+		t->environ = P->environ;
+		t->ppid = P->ppid;
+		return t;
+next_task:
+		return NULL;
+}
+
+static unsigned long long unhex(const char *__restrict cp){
+    unsigned long long ull = 0;
+    for(;;){
+        char c = *cp++;
+        if(c<0x30) break;
+        ull = (ull<<4) | (c - (c>0x57) ? 0x57 : 0x30) ;
+    }
+    return ull;
+}
 
 static proc_t* simple_readproc(PROCTAB *__restrict const PT, proc_t *__restrict const p) {
 	static struct stat sb;		// stat() buffer
@@ -1113,7 +1114,7 @@ static proc_t* simple_readproc(PROCTAB *__restrict const PT, proc_t *__restrict 
 	char *__restrict const path = PT->path;
 	unsigned flags = PT->flags;
 
-	if (stat(path, &sb) == -1)	/* no such dirent (anymore) */
+	if (stat(path, &sb) == -1)	//获取文件信息存入sb
 			goto next_proc;
 
 	if ((flags & PROC_UID) && !XinLN(uid_t, sb.st_uid, PT->uids, PT->nuid))
@@ -1195,7 +1196,7 @@ static int listed_nextpid(PROCTAB *__restrict const PT, proc_t *__restrict const
   return tgid;
 }
 
-static int simple_nextpid(PROCTAB *__restrict const PT, proc_t *__restrict const p) {
+static int simple_nextpid(PROCTAB *__restrict const PT, proc_t *__restrict const p) { //遍历/proc中的pid目录
   static struct direct *ent;		/* dirent handle */
   char *__restrict const path = PT->path;
   for (;;) {
@@ -1222,11 +1223,11 @@ PROCTAB *openproc(int flags){
 	PT->reader = simple_readproc;
 	if (flags & PROC_PID){
       PT->procfs = NULL;
-      PT->finder = listed_nextpid;
+      PT->finder = listed_nextpid; //pid递增遍历
     }else{
       PT->procfs = opendir("/proc");
       if(!PT->procfs) return NULL;
-      PT->finder = simple_nextpid;
+      PT->finder = simple_nextpid; //用readdir遍历目录
     }
     PT->flags = flags;
 
@@ -1369,7 +1370,7 @@ static void summaryhlp (CPU_t *cpu, const char *pfx)
 }
 
 static proc_t **ProcsRefresh (proc_t **table, int flags){
-	PROCTAB *PT = PT = openproc(flags);
+	PROCTAB *PT = PT = openproc(flags); //赋与各个读取函数
 	proc_t *ptsk;
 	int idx = 0;
 	static int Switch = 0;
@@ -1384,14 +1385,14 @@ static proc_t **ProcsRefresh (proc_t **table, int flags){
 		#if DEBUG
 		printf("procs_refresh\n");
 		#endif
-		table = (proc_t **)malloc(sizeof(proc_t *) * 10);
+		table = (proc_t **)malloc(sizeof(proc_t *) * 10); //第一次运行时分配空间
 	}
 
 	Frame_maxtask = Frame_running = Frame_sleepin = Frame_stopped = Frame_zombied = 0;
 	
 	while(1){
 		if((ptsk = readproc(PT, NULL)) != NULL){
-			GetProInfo(ptsk);
+			GetProInfo(ptsk); //获取进程信息
 			user_p user = check(&user_head, ptsk->euser);
 			process_p process = checkProcess(&process_head, ptsk->cmd);
 			if(user == NULL){
@@ -1428,7 +1429,7 @@ static proc_t **ProcsRefresh (proc_t **table, int flags){
 			}
 			process->alive = 1;
 			process->seconds++;
-			if((Switch / 3 ) % 2 == 1){
+			if((Switch / 3 ) % 2 == 1){ //减少显示的数目
 				TaskShow(ptsk);
 				row_to_show++;
 			}
@@ -1437,7 +1438,7 @@ static proc_t **ProcsRefresh (proc_t **table, int flags){
 				row_to_show++;
 			}
 			table[idx++] = ptsk;
-			if(idx == proc_table_size){
+			if(idx == proc_table_size){ //和c++向量一样的考量
 				proc_table_size = proc_table_size * 2;
 				table = (proc_t **)realloc(table, sizeof(proc_t *) * proc_table_size);
 			}
@@ -1563,7 +1564,7 @@ void MemRead(void){
   };
   const int mem_table_count = sizeof(mem_table)/sizeof(mem_table_struct);
 
-  FILE_TO_BUF(MEMINFO_FILE,meminfo_fd);
+  FILE_TO_BUF(MEMINFO_FILE, meminfo_fd);
 
   kb_inactive = ~0UL;
 
@@ -1608,12 +1609,12 @@ static void ShowFormat(int interact, const char *glob){
 		memcpy(line, glob, cols);
 		line[cols] = '\0';
 		PUTT("%s%s\n", line, clr_eol);
-		glob = line_end + 1;
+		glob = line_end + 1; //下一行
 	}
-	if (*glob) PUTT("%s", glob);
+	if (*glob) PUTT("%s", glob); //如果有最后一行
 }
 
-void NetRead(void)
+void NetRead(void) //获取网络信息
 {
 	char buf[2048];
 	char *p = buf;
@@ -1707,33 +1708,28 @@ static proc_t **summary_show (void){
 	static proc_t **p_table = NULL;
 	static CPU_t *smpcpu = NULL;
 
-	if(!p_table){
-		p_table = ProcsRefresh(NULL, PROC_FILLIO | PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
-	}
-	else{
-		p_table = ProcsRefresh(p_table, PROC_FILLIO | PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR);
-	}
+	p_table = ProcsRefresh(p_table, PROC_FILLIO | PROC_FILLSTATUS | PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLUSR); //获取进程和用户信息
 	#ifdef STEP
 	getchar();
 	#endif
 	write(txt_fd, "\n", 1);
-	ShowFormat(0, FormatMake(STATES_line1, Frame_maxtask, Frame_running, Frame_sleepin, Frame_stopped, Frame_zombied));
+	ShowFormat(0, FormatMake(STATES_line1, Frame_maxtask, Frame_running, Frame_sleepin, Frame_stopped, Frame_zombied)); //进程信息汇总
 	char *_p = _buf; 
 	write(txt_fd, _p, strlen(_p));
 #ifdef TEST
    getchar();
 #endif
 	row_to_show++;
-	smpcpu = CpusRead(smpcpu);
+	smpcpu = CpusRead(smpcpu); //获取cpu运行在各个状态的jiffies
 	#ifdef STEP
 	getchar();
 	#endif
 	#ifdef STEP
 	getchar();
 	#endif
-	summaryhlp(&smpcpu[Cpu_tot], "Cpu(s):");
+	summaryhlp(&smpcpu[Cpu_tot], "Cpu(s):"); //展示cpu使用情况
 
-	MemRead();
+	MemRead(); //读取/proc/meminfo下的内存汇总信息
 	ShowFormat(0, FormatMake(MEMORY_line1, kb_main_total, kb_main_used, kb_main_free, kb_main_buffers));
 	_p = _buf;
 	write(txt_fd, _p, strlen(_p));
@@ -1757,7 +1753,7 @@ static proc_t **summary_show (void){
 	write(txt_fd, "\n\n\n\tuser information\n", strlen("\n\n\n\tuser information\n"));
 	write(txt_fd, "\n\tcpu\tmem\n", strlen("\n\tcpu\tmem\n"));
 	user_p temp = &user_head;
-	while(temp->next != NULL){
+	while(temp->next != NULL){ //展示用户资源使用
 		write(txt_fd, temp->next->name, strlen(temp->next->name));
 		write(txt_fd, "\t", 1);
 		write(txt_fd, temp->next->cpu, strlen(temp->next->cpu));
@@ -1769,7 +1765,7 @@ static proc_t **summary_show (void){
 	process_p process = &process_head;
 	process_p to_free;
 	char process_buf[200];
-	while(process->next != NULL){
+	while(process->next != NULL){ //展示存活的进程 在生命周期的平均资源使用情况
 		if(process->next->alive == 1){
 			process->next->alive = 0;
 		}
@@ -1835,10 +1831,10 @@ void init(void){
 	putp(clear_screen); // 这些变量的信息可在 term.h 和 man terminfo 中查到
 	putp(cursor_invisible);
 	putp("This is for test\ncol1\ncol2\n");
-	Cpu_tot = sysconf(_SC_NPROCESSORS_ONLN);
+	Cpu_tot = sysconf(_SC_NPROCESSORS_ONLN); //获取cpu核心数目
 	MessageShow("Message:init complete");
 	getchar();
-	txt_fd = open("/usr/local/nginx/html/test/test.txt", O_WRONLY, 0);
+	txt_fd = open("/usr/local/nginx/html/test/test.txt", O_WRONLY, 0); //网页展示用的文件
 	proc_fd = open("/usr/local/nginx/html/test/proc.txt", O_WRONLY, 0);
 	if(txt_fd == -1) return -1;
 	if(proc_fd == -1) return -1;
@@ -1849,12 +1845,12 @@ void init(void){
 }
 
 void frame(void){
-	ftruncate(txt_fd, 0);
+	ftruncate(txt_fd, 0); //fd指定的文件大小改为参数length指定的大小 此处作用就是清空
 	lseek(txt_fd, 0, SEEK_SET);
 	lseek(proc_fd, 0, SEEK_END);
 	putp(tgoto(cursor_address, 0, 3));
 	char a = '\0';
-	printf("%s\n",&a);
+	printf("%s\n", &a);
 	row_to_show = 3;
 	user_p temp = &user_head;
 	user_p pre;
